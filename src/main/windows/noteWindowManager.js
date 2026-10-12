@@ -39,21 +39,22 @@ class NoteWindowManager {
 
     const windowState = note.window ?? {};
     const initialWidth = clamp(windowState.width, MIN_WIDTH, MAX_WIDTH, DEFAULT_WIDTH);
-    const initialHeight = clamp(windowState.height, MIN_HEIGHT, MAX_HEIGHT, DEFAULT_HEIGHT);
+    const expandedHeight = clamp(windowState.height, MIN_HEIGHT, MAX_HEIGHT, DEFAULT_HEIGHT);
 
     const options = {
       width: initialWidth,
-      height: initialHeight,
+      height: HEADER_HEIGHT,
       minWidth: MIN_WIDTH,
-      minHeight: MIN_HEIGHT,
+      minHeight: HEADER_HEIGHT,
       show: false,
       frame: false,
       roundedCorners: false,
-      resizable: true,
+      skipTaskbar: true,
+      resizable: false,
       maximizable: false,
       fullscreenable: false,
       alwaysOnTop: false,
-      backgroundColor: '#fff2a8',
+      backgroundColor: '#f6df76',
       title: note.title || 'New Note',
       webPreferences: {
         preload: path.join(__dirname, '../../preload/notePreload.js'),
@@ -70,7 +71,8 @@ class NoteWindowManager {
 
     const noteWindow = new BrowserWindow(options);
     this.windows.set(note.id, noteWindow);
-    this.expandedHeights.set(note.id, initialHeight);
+    this.expandedHeights.set(note.id, expandedHeight);
+    this.collapsedNotes.add(note.id);
 
     noteWindow.setMenuBarVisibility(false);
 
@@ -173,6 +175,11 @@ class NoteWindowManager {
     return null;
   }
 
+  isCollapsedForWebContents(webContentsId) {
+    const noteId = this.getNoteIdForWebContents(webContentsId);
+    return Boolean(noteId && this.collapsedNotes.has(noteId));
+  }
+
   toggleCollapsedForWebContents(webContentsId) {
     const noteId = this.getNoteIdForWebContents(webContentsId);
     const noteWindow = this.getWindowForWebContents(webContentsId);
@@ -204,7 +211,7 @@ class NoteWindowManager {
       return { collapsed: false };
     }
 
-    this.expandedHeights.set(note.id, clamp(bounds.height, MIN_HEIGHT, MAX_HEIGHT, DEFAULT_HEIGHT));
+    this.expandedHeights.set(noteId, clamp(bounds.height, MIN_HEIGHT, MAX_HEIGHT, DEFAULT_HEIGHT));
     this.collapsedNotes.add(noteId);
     noteWindow.setMinimumSize(MIN_WIDTH, HEADER_HEIGHT);
     noteWindow.setBounds({

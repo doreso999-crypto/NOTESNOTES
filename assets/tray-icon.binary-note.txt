@@ -1,0 +1,1 @@
+The PNG tray icon must be stored as binary data, not as the base64 string in tray-icon.png.

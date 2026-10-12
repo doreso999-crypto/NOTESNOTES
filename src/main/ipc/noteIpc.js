@@ -3,7 +3,7 @@
 const { ipcMain } = require('electron');
 const channels = require('../../shared/ipcChannels');
 
-const NOTE_CHANNELS = [
+const NOTE_HANDLE_CHANNELS = [
   channels.NOTE_GET_CURRENT,
   channels.NOTE_SAVE_CURRENT,
   channels.NOTE_TOGGLE_COLLAPSED,
@@ -48,6 +48,11 @@ function registerNoteIpc(noteStore, noteWindowManager) {
     return noteWindowManager.toggleCollapsedForWebContents(event.sender.id);
   });
 
+  ipcMain.on(channels.NOTE_MOVE_BY, (event, deltaX, deltaY) => {
+    requireCurrentNoteId(event, noteWindowManager);
+    noteWindowManager.moveByForWebContents(event.sender.id, deltaX, deltaY);
+  });
+
   ipcMain.handle(channels.NOTE_CLOSE, (event) => {
     requireCurrentNoteId(event, noteWindowManager);
     const webContentsId = event.sender.id;
@@ -61,9 +66,11 @@ function registerNoteIpc(noteStore, noteWindowManager) {
 }
 
 function disposeNoteIpc() {
-  for (const channel of NOTE_CHANNELS) {
+  for (const channel of NOTE_HANDLE_CHANNELS) {
     ipcMain.removeHandler(channel);
   }
+
+  ipcMain.removeAllListeners(channels.NOTE_MOVE_BY);
 }
 
 module.exports = { registerNoteIpc, disposeNoteIpc };

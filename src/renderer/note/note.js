@@ -44,7 +44,7 @@ function bindEvents() {
   elements.content.addEventListener('input', scheduleSave);
 
   elements.settingsButton.addEventListener('click', () => {
-    toggleSettings();
+    void toggleSettings();
   });
 
   elements.renameForm.addEventListener('submit', (event) => {
@@ -159,8 +159,10 @@ async function toggleCollapsed() {
     const result = await window.stickyNote.toggleCollapsed();
     state.collapsed = Boolean(result?.collapsed);
     elements.stickyNote.classList.toggle('is-collapsed', state.collapsed);
+    return state.collapsed;
   } catch (error) {
     console.error('Unable to collapse sticky note.', error);
+    return state.collapsed;
   }
 }
 
@@ -173,9 +175,9 @@ async function handleClose() {
   }
 }
 
-function toggleSettings() {
+async function toggleSettings() {
   if (state.collapsed) {
-    return;
+    await toggleCollapsed();
   }
 
   const shouldOpen = elements.settingsMenu.hidden;

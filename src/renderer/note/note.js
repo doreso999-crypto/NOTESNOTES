@@ -1,47 +1,31 @@
 'use strict';
 
 const SAVE_DELAY_MS = 300;
-const DOUBLE_CLICK_MS = 420;
-const DOUBLE_CLICK_DISTANCE = 10;
-const DRAG_THRESHOLD = 4;
-const RESIZE_STEP = 16;
+const DOUBLE_PRESS_MS = 300;
+const DOUBLE_PRESS_DISTANCE = 8;
 
 const state = {
   note: null,
   title: 'New Note',
   collapsed: false,
+  togglePending: false,
+  lastTitlePressAt: 0,
+  lastTitlePressX: 0,
+  lastTitlePressY: 0,
   saveTimer: null,
   saveChain: Promise.resolve(),
-  toggleChain: Promise.resolve(),
-  lastPersistedSnapshot: '',
-  headerPointerId: null,
-  headerStartScreenX: 0,
-  headerStartScreenY: 0,
-  headerLastScreenX: 0,
-  headerLastScreenY: 0,
-  headerMoved: false,
-  headerSecondClickCandidate: false,
-  lastHeaderClickAt: 0,
-  lastHeaderClickScreenX: 0,
-  lastHeaderClickScreenY: 0,
-  resizePointerId: null,
-  resizeHandle: null,
-  resizeEdge: null,
-  resizeLastScreenX: 0,
-  resizeLastScreenY: 0
+  lastPersistedSnapshot: ''
 };
 
 const elements = {
   stickyNote: document.querySelector('#sticky-note'),
-  header: document.querySelector('#note-header'),
   noteName: document.querySelector('#note-name'),
   content: document.querySelector('#note-content'),
   settingsButton: document.querySelector('#settings-button'),
   settingsMenu: document.querySelector('#settings-menu'),
   renameForm: document.querySelector('#rename-form'),
   renameInput: document.querySelector('#rename-input'),
-  closeButton: document.querySelector('#close-button'),
-  resizeHandles: document.querySelectorAll('[data-resize-edge]')
+  closeButton: document.querySelector('#close-button')
 };
 
 async function initialize() {
@@ -69,6 +53,8 @@ async function initialize() {
 function bindEvents() {
   elements.content.addEventListener('input', scheduleSave);
 
+  elements.noteName.addEventListener('pointerdown', handleTitlePointerDown);
+
   elements.settingsButton.addEventListener('click', () => {
     void toggleSettings();
   });
@@ -89,18 +75,6 @@ function bindEvents() {
     void handleClose();
   });
 
-  elements.header.addEventListener('pointerdown', handleHeaderPointerDown);
-  elements.header.addEventListener('pointermove', handleHeaderPointerMove);
-  elements.header.addEventListener('pointerup', handleHeaderPointerEnd);
-  elements.header.addEventListener('pointercancel', handleHeaderPointerEnd);
-
-  for (const handle of elements.resizeHandles) {
-    handle.addEventListener('pointerdown', handleResizePointerDown);
-    handle.addEventListener('pointermove', handleResizePointerMove);
-    handle.addEventListener('pointerup', handleResizePointerEnd);
-    handle.addEventListener('pointercancel', handleResizePointerEnd);
-  }
-
   document.addEventListener('pointerdown', (event) => {
     if (
       !elements.settingsMenu.hidden &&
@@ -119,168 +93,31 @@ function bindEvents() {
   });
 }
 
-function isHeaderControlTarget(target) {
-  return Boolean(target.closest('.window-controls, .settings-menu'));
-}
-
-function handleHeaderPointerDown(event) {
-  if (event.button !== 0 || isHeaderControlTarget(event.target)) {
-    return;
-  }
-
-  const now = performance.now();
-  const clickDistance = Math.hypot(
-    event.screenX - state.lastHeaderClickScreenX,
-    event.screenY - state.lastHeaderClickScreenY
-  );
-
-  state.headerSecondClickCandidate =
-    state.lastHeaderClickAt > 0 &&
-    now - state.lastHeaderClickAt <= DOUBLE_CLICK_MS &&
-    clickDistance <= DOUBLE_CLICK_DISTANCE;
-
-  if (state.headerSecondClickCandidate) {
-    state.lastHeaderClickAt = 0;
-  }
-
-  state.headerPointerId = event.pointerId;
-  state.headerStartScreenX = event.screenX;
-  state.headerStartScreenY = event.screenY;
-  state.headerLastScreenX = event.screenX;
-  state.headerLastScreenY = event.screenY;
-  state.headerMoved = false;
-  elements.header.setPointerCapture(event.pointerId);
-}
-
-function handleHeaderPointerMove(event) {
-  if (
-    state.headerPointerId !== event.pointerId ||
-    (event.buttons & 1) !== 1
-  ) {
-    return;
-  }
-
-  const totalDistance = Math.hypot(
-    event.screenX - state.headerStartScreenX,
-    event.screenY - state.headerStartScreenY
-  );
-
-  if (!state.headerMoved && totalDistance < DRAG_THRESHOLD) {
-    return;
-  }
-
-  state.headerMoved = true;
-  state.headerSecondClickCandidate = false;
-  state.lastHeaderClickAt = 0;
-
-  const deltaX = event.screenX - state.headerLastScreenX;
-  const deltaY = event.screenY - state.headerLastScreenY;
-
-  state.headerLastScreenX = event.screenX;
-  state.headerLastScreenY = event.screenY;
-
-  if (deltaX !== 0 || deltaY !== 0) {
-    window.stickyNote.moveBy(deltaX, deltaY);
-  }
-}
-
-function handleHeaderPointerEnd(event) {
-  if (state.headerPointerId !== event.pointerId) {
-    return;
-  }
-
-  if (elements.header.hasPointerCapture(event.pointerId)) {
-    elements.header.releasePointerCapture(event.pointerId);
-  }
-
-  if (
-    !state.headerMoved &&
-    event.type === 'pointerup' &&
-    state.headerSecondClickCandidate
-  ) {
-    state.headerSecondClickCandidate = false;
-    state.lastHeaderClickAt = 0;
-    void toggleCollapsed();
-  } else if (!state.headerMoved && event.type === 'pointerup') {
-    state.lastHeaderClickAt = performance.now();
-    state.lastHeaderClickScreenX = event.screenX;
-    state.lastHeaderClickScreenY = event.screenY;
-  } else {
-    state.lastHeaderClickAt = 0;
-    state.headerSecondClickCandidate = false;
-  }
-
-  state.headerPointerId = null;
-  state.headerMoved = false;
-}
-
-function handleResizePointerDown(event) {
+function handleTitlePointerDown(event) {
   if (event.button !== 0) {
     return;
   }
 
-  event.preventDefault();
-  event.stopPropagation();
+  const now = performance.now();
+  const distance = Math.hypot(
+    event.screenX - state.lastTitlePressX,
+    event.screenY - state.lastTitlePressY
+  );
+  const isSecondPress =
+    state.lastTitlePressAt > 0 &&
+    now - state.lastTitlePressAt <= DOUBLE_PRESS_MS &&
+    distance <= DOUBLE_PRESS_DISTANCE;
 
-  state.resizePointerId = event.pointerId;
-  state.resizeHandle = event.currentTarget;
-  state.resizeEdge = event.currentTarget.dataset.resizeEdge;
-  state.resizeLastScreenX = event.screenX;
-  state.resizeLastScreenY = event.screenY;
-  state.resizeHandle.setPointerCapture(event.pointerId);
-}
-
-function handleResizePointerMove(event) {
-  if (
-    state.resizePointerId !== event.pointerId ||
-    !state.resizeEdge ||
-    (event.buttons & 1) !== 1
-  ) {
+  if (isSecondPress) {
+    state.lastTitlePressAt = 0;
+    event.preventDefault();
+    void toggleCollapsed();
     return;
   }
 
-  const rawDeltaX = event.screenX - state.resizeLastScreenX;
-  const rawDeltaY = event.screenY - state.resizeLastScreenY;
-  const usesHorizontalAxis =
-    state.resizeEdge.includes('e') || state.resizeEdge.includes('w');
-  const usesVerticalAxis =
-    state.resizeEdge.includes('n') || state.resizeEdge.includes('s');
-
-  const deltaX = usesHorizontalAxis ? snapPointerDelta(rawDeltaX) : 0;
-  const deltaY = usesVerticalAxis ? snapPointerDelta(rawDeltaY) : 0;
-
-  if (deltaX === 0 && deltaY === 0) {
-    return;
-  }
-
-  state.resizeLastScreenX += deltaX;
-  state.resizeLastScreenY += deltaY;
-  window.stickyNote.resizeBy(state.resizeEdge, deltaX, deltaY);
-}
-
-function handleResizePointerEnd(event) {
-  if (state.resizePointerId !== event.pointerId) {
-    return;
-  }
-
-  if (
-    state.resizeHandle &&
-    state.resizeHandle.hasPointerCapture(event.pointerId)
-  ) {
-    state.resizeHandle.releasePointerCapture(event.pointerId);
-  }
-
-  state.resizePointerId = null;
-  state.resizeHandle = null;
-  state.resizeEdge = null;
-}
-
-function snapPointerDelta(value) {
-  if (Math.abs(value) < RESIZE_STEP) {
-    return 0;
-  }
-
-  return Math.trunc(value / RESIZE_STEP) * RESIZE_STEP;
+  state.lastTitlePressAt = now;
+  state.lastTitlePressX = event.screenX;
+  state.lastTitlePressY = event.screenY;
 }
 
 function scheduleSave() {
@@ -346,31 +183,36 @@ async function handleRename() {
   }
 }
 
-function toggleCollapsed() {
-  closeSettings();
+async function toggleCollapsed() {
+  if (state.togglePending) {
+    return state.collapsed;
+  }
 
-  state.collapsed = !state.collapsed;
+  closeSettings();
+  state.togglePending = true;
+
+  const previousState = state.collapsed;
+  state.collapsed = !previousState;
   renderCollapsedState();
 
-  state.toggleChain = state.toggleChain
-    .catch(() => undefined)
-    .then(async () => {
-      const result = await window.stickyNote.toggleCollapsed();
-      state.collapsed = Boolean(result?.collapsed);
-      renderCollapsedState();
+  try {
+    const result = await window.stickyNote.toggleCollapsed();
+    state.collapsed = Boolean(result?.collapsed);
+    renderCollapsedState();
 
-      if (!state.collapsed) {
-        elements.content.focus();
-      }
+    if (!state.collapsed) {
+      elements.content.focus();
+    }
 
-      return state.collapsed;
-    })
-    .catch((error) => {
-      console.error('Unable to toggle sticky note.', error);
-      return state.collapsed;
-    });
-
-  return state.toggleChain;
+    return state.collapsed;
+  } catch (error) {
+    state.collapsed = previousState;
+    renderCollapsedState();
+    console.error('Unable to toggle sticky note.', error);
+    return state.collapsed;
+  } finally {
+    state.togglePending = false;
+  }
 }
 
 async function handleClose() {

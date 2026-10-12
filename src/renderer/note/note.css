@@ -111,7 +111,6 @@ textarea {
 
 .window-button:focus-visible,
 .rename-input:focus-visible,
-.note-content:focus-visible,
 #rename-input:focus-visible,
 .rename-button:focus-visible {
   outline: 2px solid var(--note-focus);
@@ -205,6 +204,12 @@ textarea {
   font-size: 15px;
   line-height: 1.55;
   user-select: text;
+}
+
+.note-content:focus,
+.note-content:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 .note-content::placeholder {

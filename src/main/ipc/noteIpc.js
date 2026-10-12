@@ -6,8 +6,7 @@ const channels = require('../../shared/ipcChannels');
 const NOTE_CHANNELS = [
   channels.NOTE_GET_CURRENT,
   channels.NOTE_SAVE_CURRENT,
-  channels.NOTE_SET_ALWAYS_ON_TOP,
-  channels.NOTE_MINIMIZE,
+  channels.NOTE_TOGGLE_COLLAPSED,
   channels.NOTE_CLOSE
 ];
 
@@ -41,25 +40,19 @@ function registerNoteIpc(noteStore, noteWindowManager) {
     return noteStore.updateContent(noteId, { title, content });
   });
 
-  ipcMain.handle(channels.NOTE_SET_ALWAYS_ON_TOP, async (event, enabled) => {
-    const noteId = requireCurrentNoteId(event, noteWindowManager);
-    const value = Boolean(enabled);
-
-    noteWindowManager.setAlwaysOnTopForWebContents(event.sender.id, value);
-    await noteStore.setAlwaysOnTop(noteId, value);
-    return value;
-  });
-
-  ipcMain.handle(channels.NOTE_MINIMIZE, (event) => {
-    noteWindowManager.minimizeForWebContents(event.sender.id);
-    return true;
+  ipcMain.handle(channels.NOTE_TOGGLE_COLLAPSED, (event) => {
+    requireCurrentNoteId(event, noteWindowManager);
+    return noteWindowManager.toggleCollapsedForWebContents(event.sender.id);
   });
 
   ipcMain.handle(channels.NOTE_CLOSE, (event) => {
+    requireCurrentNoteId(event, noteWindowManager);
     const webContentsId = event.sender.id;
+
     setImmediate(() => {
       noteWindowManager.closeForWebContents(webContentsId);
     });
+
     return true;
   });
 }

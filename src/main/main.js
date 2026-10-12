@@ -12,6 +12,7 @@ const {
   registerDashboardIpc,
   disposeDashboardIpc
 } = require('./ipc/dashboardIpc');
+const { registerNoteIpc, disposeNoteIpc } = require('./ipc/noteIpc');
 const { NoteStore } = require('./services/noteStore');
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
@@ -23,8 +24,9 @@ async function initializeApplication() {
   noteStore = new NoteStore(path.join(app.getPath('userData'), 'notes.json'));
   await noteStore.initialize();
 
-  noteWindowManager = new NoteWindowManager();
+  noteWindowManager = new NoteWindowManager(noteStore);
   registerDashboardIpc(noteStore, noteWindowManager);
+  registerNoteIpc(noteStore, noteWindowManager);
 
   createDashboardWindow();
   createAppTray({
@@ -53,13 +55,12 @@ if (!hasSingleInstanceLock) {
     }
   });
 
-  // Intentionally keep the process alive when the dashboard (and eventually
-  // all note windows) are closed. The tray is the application's persistent
-  // entry point; quitting is explicit through the tray menu or OS quit action.
+  // Keep the app resident in the tray when all dashboard/note windows close.
   app.on('window-all-closed', () => {});
 
   app.on('before-quit', () => {
     disposeDashboardIpc();
+    disposeNoteIpc();
     destroyAppTray();
   });
 }

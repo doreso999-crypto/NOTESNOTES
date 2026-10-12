@@ -3,8 +3,9 @@
 const path = require('node:path');
 const { BrowserWindow } = require('electron');
 
+const HEADER_HEIGHT = 44;
 const MIN_WIDTH = 240;
-const MIN_HEIGHT = 220;
+const MIN_HEIGHT = 180;
 const DEFAULT_WIDTH = 320;
 const DEFAULT_HEIGHT = 360;
 const MAX_WIDTH = 1200;
@@ -23,25 +24,26 @@ class NoteWindowManager {
     this.noteStore = noteStore;
     this.windows = new Map();
     this.boundsTimers = new Map();
+    this.expandedHeights = new Map();
+    this.collapsedNotes = new Set();
   }
 
   async open(note) {
     const existingWindow = this.windows.get(note.id);
 
     if (existingWindow && !existingWindow.isDestroyed()) {
-      if (existingWindow.isMinimized()) {
-        existingWindow.restore();
-      }
-
       existingWindow.show();
       existingWindow.focus();
       return { ok: true, noteId: note.id, reused: true };
     }
 
     const windowState = note.window ?? {};
+    const initialWidth = clamp(windowState.width, MIN_WIDTH, MAX_WIDTH, DEFAULT_WIDTH);
+    const initialHeight = clamp(windowState.height, MIN_HEIGHT, MAX_HEIGHT, DEFAULT_HEIGHT);
+
     const options = {
-      width: clamp(windowState.width, MIN_WIDTH, MAX_WIDTH, DEFAULT_WIDTH),
-      height: clamp(windowState.height, MIN_HEIGHT, MAX_HEIGHT, DEFAULT_HEIGHT),
+      width: initialWidth,
+      height: initialHeight,
       minWidth: MIN_WIDTH,
       minHeight: MIN_HEIGHT,
       show: false,
@@ -49,9 +51,9 @@ class NoteWindowManager {
       resizable: true,
       maximizable: false,
       fullscreenable: false,
-      alwaysOnTop: Boolean(note.alwaysOnTop),
+      alwaysOnTop: false,
       backgroundColor: '#fff2a8',
-      title: note.title || 'Untitled note',
+      title: note.title || 'New Note',
       webPreferences: {
         preload: path.join(__dirname, '../../preload/notePreload.js'),
         contextIsolation: true,
@@ -67,6 +69,7 @@ class NoteWindowManager {
 
     const noteWindow = new BrowserWindow(options);
     this.windows.set(note.id, noteWindow);
+    this.expandedHeights.set(note.id, initialHeight);
 
     noteWindow.setMenuBarVisibility(false);
 
@@ -76,12 +79,23 @@ class NoteWindowManager {
       }
 
       const bounds = noteWindow.getBounds();
-      this.noteStore.updateWindowState(note.id, bounds).catch((error) => {
+      const persistedBounds = {
+        ...bounds,
+        height: this.collapsedNotes.has(note.id)
+          ? this.expandedHeights.get(note.id) ?? DEFAULT_HEIGHT
+          : bounds.height
+      };
+
+      this.noteStore.updateWindowState(note.id, persistedBounds).catch((error) => {
         console.error(`Failed to persist window state for note ${note.id}.`, error);
       });
     };
 
     const scheduleBoundsPersist = () => {
+      if (!this.collapsedNotes.has(note.id) && !noteWindow.isDestroyed()) {
+        this.expandedHeights.set(note.id, noteWindow.getBounds().height);
+      }
+
       const existingTimer = this.boundsTimers.get(note.id);
 
       if (existingTimer) {
@@ -112,6 +126,8 @@ class NoteWindowManager {
 
     noteWindow.on('closed', () => {
       this.windows.delete(note.id);
+      this.expandedHeights.delete(note.id);
+      this.collapsedNotes.delete(note.id);
     });
 
     noteWindow.once('ready-to-show', () => {
@@ -156,22 +172,49 @@ class NoteWindowManager {
     return null;
   }
 
-  setAlwaysOnTopForWebContents(webContentsId, enabled) {
+  toggleCollapsedForWebContents(webContentsId) {
+    const noteId = this.getNoteIdForWebContents(webContentsId);
     const noteWindow = this.getWindowForWebContents(webContentsId);
 
-    if (!noteWindow) {
+    if (!noteId || !noteWindow) {
       throw new Error('Sticky note window is no longer available.');
     }
 
-    noteWindow.setAlwaysOnTop(Boolean(enabled));
-  }
+    const bounds = noteWindow.getBounds();
 
-  minimizeForWebContents(webContentsId) {
-    const noteWindow = this.getWindowForWebContents(webContentsId);
+    if (this.collapsedNotes.has(noteId)) {
+      const expandedHeight = clamp(
+        this.expandedHeights.get(noteId),
+        MIN_HEIGHT,
+        MAX_HEIGHT,
+        DEFAULT_HEIGHT
+      );
 
-    if (noteWindow) {
-      noteWindow.minimize();
+      this.collapsedNotes.delete(noteId);
+      noteWindow.setResizable(true);
+      noteWindow.setMinimumSize(MIN_WIDTH, MIN_HEIGHT);
+      noteWindow.setBounds({
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: expandedHeight
+      });
+
+      return { collapsed: false };
     }
+
+    this.expandedHeights.set(noteId, clamp(bounds.height, MIN_HEIGHT, MAX_HEIGHT, DEFAULT_HEIGHT));
+    this.collapsedNotes.add(noteId);
+    noteWindow.setMinimumSize(MIN_WIDTH, HEADER_HEIGHT);
+    noteWindow.setBounds({
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: HEADER_HEIGHT
+    });
+    noteWindow.setResizable(false);
+
+    return { collapsed: true };
   }
 
   closeForWebContents(webContentsId) {

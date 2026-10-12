@@ -27,6 +27,7 @@ class StickyNotesApplication(QObject):
             on_archive=self.set_archived,
             on_delete=self.delete_note,
         )
+        self.dashboard.scroll.viewport().setStyleSheet("background: transparent;")
 
         self.tray = QSystemTrayIcon(self._make_icon(), self)
         self.tray.setToolTip("StickyNotes Pro")

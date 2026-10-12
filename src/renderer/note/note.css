@@ -4,17 +4,18 @@
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
   --note-bg: #fff2a8;
-  --note-bg-strong: #f6df76;
-  --note-border: rgba(78, 62, 0, 0.22);
+  --note-header: #f6df76;
+  --note-border: rgba(78, 62, 0, 0.28);
   --note-text: #342b08;
-  --note-muted: #71642c;
-  --note-hover: rgba(93, 72, 0, 0.11);
-  --note-focus: rgba(83, 61, 0, 0.34);
-  --danger-hover: rgba(178, 49, 49, 0.14);
+  --note-muted: #6f6227;
+  --note-hover: rgba(93, 72, 0, 0.12);
+  --note-focus: rgba(83, 61, 0, 0.36);
+  --danger-hover: rgba(178, 49, 49, 0.16);
 }
 
 * {
   box-sizing: border-box;
+  border-radius: 0;
 }
 
 html,
@@ -35,51 +36,52 @@ button,
 input,
 textarea {
   font: inherit;
-}
-
-button,
-input,
-textarea {
+  border-radius: 0;
   -webkit-app-region: no-drag;
 }
 
 .sticky-note {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: 44px minmax(0, 1fr);
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent 30%),
-    var(--note-bg);
   border: 1px solid var(--note-border);
+  background: var(--note-bg);
 }
 
-.note-titlebar {
+.sticky-note.is-collapsed {
+  grid-template-rows: 44px;
+}
+
+.sticky-note.is-collapsed .note-body {
+  display: none;
+}
+
+.note-header {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  min-height: 42px;
-  background: var(--note-bg-strong);
+  height: 44px;
+  min-width: 0;
+  align-items: stretch;
+  background: var(--note-header);
   border-bottom: 1px solid var(--note-border);
+  -webkit-app-region: drag;
 }
 
-.note-drag-region {
+.note-name {
   display: flex;
   min-width: 0;
   align-items: center;
   padding: 0 12px;
-  -webkit-app-region: drag;
-}
-
-.note-handle {
   overflow: hidden;
-  color: var(--note-muted);
-  font-size: 11px;
+  color: var(--note-text);
+  font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.08em;
   text-overflow: ellipsis;
-  text-transform: uppercase;
   white-space: nowrap;
+  pointer-events: none;
 }
 
 .window-controls {
@@ -89,16 +91,17 @@ textarea {
 }
 
 .window-button {
+  width: 42px;
   min-width: 42px;
   margin: 0;
-  padding: 0 10px;
+  padding: 0;
   border: 0;
-  border-left: 1px solid rgba(78, 62, 0, 0.12);
+  border-left: 1px solid rgba(78, 62, 0, 0.14);
   background: transparent;
   color: var(--note-text);
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 19px;
+  line-height: 1;
 }
 
 .window-button:hover,
@@ -107,18 +110,16 @@ textarea {
 }
 
 .window-button:focus-visible,
-.note-title-input:focus-visible,
-.note-content-input:focus-visible {
+.rename-input:focus-visible,
+.note-content:focus-visible,
+#rename-input:focus-visible,
+.rename-button:focus-visible {
   outline: 2px solid var(--note-focus);
   outline-offset: -2px;
 }
 
-.window-button[aria-pressed="true"] {
-  background: rgba(93, 72, 0, 0.17);
-}
-
 .window-button--close {
-  font-size: 20px;
+  font-size: 21px;
   font-weight: 400;
 }
 
@@ -127,81 +128,92 @@ textarea {
   background: var(--danger-hover);
 }
 
-.note-editor {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  min-height: 0;
-  padding: 16px 17px 10px;
+.settings-menu {
+  position: absolute;
+  z-index: 10;
+  top: 43px;
+  right: 41px;
+  width: 230px;
+  padding: 12px;
+  border: 1px solid var(--note-border);
+  background: #fff7c8;
+  box-shadow: 0 8px 20px rgba(61, 48, 0, 0.18);
+  -webkit-app-region: no-drag;
 }
 
-.note-title-input,
-.note-content-input {
-  width: 100%;
-  border: 0;
-  background: transparent;
+.settings-menu[hidden] {
+  display: none;
+}
+
+.rename-form {
+  display: grid;
+  gap: 8px;
+}
+
+.rename-form label {
+  color: var(--note-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rename-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+#rename-input {
+  min-width: 0;
+  height: 34px;
+  padding: 0 9px;
+  border: 1px solid var(--note-border);
+  border-right: 0;
+  background: #fffdf0;
   color: var(--note-text);
   user-select: text;
 }
 
-.note-title-input {
-  padding: 0 0 10px;
-  border-bottom: 1px solid rgba(78, 62, 0, 0.14);
-  font-size: 19px;
-  font-weight: 750;
-  line-height: 1.3;
+.rename-button {
+  height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--note-border);
+  background: var(--note-header);
+  color: var(--note-text);
+  cursor: pointer;
+  font-weight: 700;
 }
 
-.note-title-input::placeholder,
-.note-content-input::placeholder {
-  color: rgba(78, 62, 0, 0.48);
+.rename-button:hover,
+.rename-button:focus-visible {
+  background: #efd360;
 }
 
-.note-content-input {
+.note-body {
   min-height: 0;
-  padding: 12px 0 0;
+  background: var(--note-bg);
+}
+
+.note-content {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 14px;
+  border: 0;
+  outline: 0;
   resize: none;
-  outline: none;
+  background: transparent;
+  color: var(--note-text);
   font-size: 15px;
   line-height: 1.55;
+  user-select: text;
 }
 
-.note-footer {
-  display: flex;
-  min-height: 34px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 7px 12px 8px;
-  border-top: 1px solid rgba(78, 62, 0, 0.1);
-  color: var(--note-muted);
-  font-size: 11px;
-}
-
-.save-status,
-.modified-time {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.modified-time {
-  text-align: right;
-}
-
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
+.note-content::placeholder {
+  color: rgba(78, 62, 0, 0.45);
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .window-button {
+  .window-button,
+  .rename-button {
     transition: background-color 120ms ease;
   }
 }

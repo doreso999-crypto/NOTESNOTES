@@ -6,7 +6,7 @@
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
-    "check": "node --check src/main/main.js && node --check src/main/services/noteStore.js && node --check src/preload/dashboardPreload.js && node --check src/renderer/dashboard/dashboard.js"
+    "check": "node --check src/main/main.js && node --check src/main/ipc/dashboardIpc.js && node --check src/main/ipc/noteIpc.js && node --check src/main/services/noteStore.js && node --check src/main/windows/dashboardWindow.js && node --check src/main/windows/noteWindowManager.js && node --check src/main/tray/appTray.js && node --check src/preload/dashboardPreload.js && node --check src/preload/notePreload.js && node --check src/renderer/dashboard/dashboard.js && node --check src/renderer/note/note.js && node --check src/shared/ipcChannels.js"
   },
   "devDependencies": {
     "electron": "^44.7.0"

@@ -52,10 +52,15 @@ function registerNoteIpc(noteStore, noteWindowManager) {
 
   ipcMain.handle(channels.NOTE_MINIMIZE, (event) => {
     noteWindowManager.minimizeForWebContents(event.sender.id);
+    return true;
   });
 
   ipcMain.handle(channels.NOTE_CLOSE, (event) => {
-    noteWindowManager.closeForWebContents(event.sender.id);
+    const webContentsId = event.sender.id;
+    setImmediate(() => {
+      noteWindowManager.closeForWebContents(webContentsId);
+    });
+    return true;
   });
 }
 

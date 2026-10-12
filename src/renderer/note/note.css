@@ -64,7 +64,8 @@ textarea {
   height: 44px;
   min-width: 0;
   background: var(--note-header);
-  -webkit-app-region: drag;
+  cursor: move;
+  -webkit-app-region: no-drag;
 }
 
 .note-name {
@@ -79,14 +80,13 @@ textarea {
   padding: 0 8px;
   overflow: hidden;
   color: var(--note-text);
-  cursor: default;
   font-size: 13px;
   font-weight: 700;
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
+  pointer-events: none;
   transform: translateX(-50%);
-  -webkit-app-region: no-drag;
 }
 
 .window-controls {
@@ -97,6 +97,7 @@ textarea {
   display: flex;
   height: 44px;
   align-items: stretch;
+  cursor: default;
   -webkit-app-region: no-drag;
 }
 
@@ -146,6 +147,7 @@ textarea {
   border: 1px solid var(--note-border);
   background: #fff7c8;
   box-shadow: 0 8px 20px rgba(61, 48, 0, 0.18);
+  cursor: default;
   -webkit-app-region: no-drag;
 }
 

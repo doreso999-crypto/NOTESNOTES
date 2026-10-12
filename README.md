@@ -1,38 +1,67 @@
 # StickyNotes Pro
 
-StickyNotes Pro is a cross-platform Electron desktop app for managing independent sticky-note windows from a persistent dashboard and system tray.
+StickyNotes Pro is being rebuilt from scratch as a native desktop application using **Python + PySide6 / Qt 6**.
 
-## Current phase
+The current milestone intentionally contains only the sticky-note core. The previous Electron dashboard and renderer have been removed.
 
-This repository currently implements the dashboard foundation only. Sticky-note `BrowserWindow` instances are intentionally not implemented yet.
+## Current features
 
-## Architecture goals
+- Native frameless sticky-note windows
+- Square note edges
+- 28 px header
+- Centered note title
+- `⋯` rename control and `×` close control
+- Double-click the header to collapse/expand the text area
+- Native window dragging through Qt
+- Native edge/corner resizing through Qt
+- Width/height snapping toward 16 px increments
+- Collapsed notes stay header-height but remain horizontally resizable
+- Hidden text-area scrollbars
+- Multiple notes
+- Automatic names: `New Note`, `New Note 2`, ...
+- JSON persistence for content, title, position, size, and collapsed state
+- System tray with New Note, Show All Notes, note list, and Quit
+- Individual notes use Qt tool-window behavior so they do not create normal taskbar entries on Windows
 
-- Electron main process owns windows, tray lifecycle, persistence, and IPC.
-- Preload exposes a narrow, explicit dashboard API with context isolation enabled.
-- Dashboard HTML contains layout and reusable note-card markup.
-- Dashboard CSS contains all presentation and responsive styling.
-- Dashboard JavaScript contains renderer behavior only.
-- Note data is persisted as JSON in Electron's per-user `userData` directory.
-- Closing the dashboard does not quit the application; the tray can reopen it.
-- Future sticky-note windows will be independent top-level `BrowserWindow` instances, not children of the dashboard.
+## Windows setup
 
-## Development
+From Git Bash in the repository:
 
 ```bash
-npm install
-npm start
+cd ~/NOTESNOTES
+py -m venv .venv
+source .venv/Scripts/activate
+py -m pip install --upgrade pip
+py -m pip install -r requirements.txt
+py main.py
 ```
 
-## Dashboard features
+On later runs:
 
-- Create a note record
-- Search title and content
-- Active / archived filters
-- Sort by modified date, created date, or title
-- Responsive note grid
-- Duplicate notes
-- Archive / restore notes
-- Permanently delete notes
-- Tray menu with Show Dashboard and Quit
-- Open-note IPC seam reserved for the next development phase
+```bash
+cd ~/NOTESNOTES
+source .venv/Scripts/activate
+py main.py
+```
+
+## Syntax check
+
+```bash
+py -m compileall -q main.py stickynotes
+```
+
+## Project layout
+
+```text
+main.py
+requirements.txt
+stickynotes/
+  __init__.py
+  app.py
+  note_window.py
+  storage.py
+```
+
+## Target platforms
+
+Development starts on Windows. The code is structured around Qt's cross-platform APIs so Fedora KDE Plasma/Wayland can be the primary Linux target later, with macOS kept possible from the same codebase.

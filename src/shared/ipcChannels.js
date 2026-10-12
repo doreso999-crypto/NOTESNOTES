@@ -9,7 +9,6 @@ module.exports = Object.freeze({
   OPEN_NOTE: 'notes:open',
   NOTE_GET_CURRENT: 'note:get-current',
   NOTE_SAVE_CURRENT: 'note:save-current',
-  NOTE_SET_ALWAYS_ON_TOP: 'note:set-always-on-top',
-  NOTE_MINIMIZE: 'note:minimize',
+  NOTE_TOGGLE_COLLAPSED: 'note:toggle-collapsed',
   NOTE_CLOSE: 'note:close'
 });

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from copy import deepcopy
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -11,6 +12,10 @@ from PySide6.QtCore import QStandardPaths
 
 DEFAULT_WIDTH = 320
 DEFAULT_HEIGHT = 352
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 class NoteStore:
@@ -35,6 +40,7 @@ class NoteStore:
             payload = []
 
         self.notes = [self._normalize(note) for note in payload if isinstance(note, dict)]
+        self.save()
 
     def save(self) -> None:
         temp_path = self.path.with_suffix(".tmp")
@@ -53,11 +59,15 @@ class NoteStore:
                 return deepcopy(note)
         return None
 
-    def create(self) -> dict:
+    def create(self, *, title: str | None = None, content: str = "") -> dict:
+        now = _utc_now()
         note = {
             "id": str(uuid4()),
-            "title": self._next_default_title(),
-            "content": "",
+            "title": title or self._next_default_title(),
+            "content": content,
+            "created": now,
+            "modified": now,
+            "archived": False,
             "x": None,
             "y": None,
             "width": DEFAULT_WIDTH,
@@ -72,6 +82,8 @@ class NoteStore:
     def update(self, note_id: str, **changes) -> dict:
         for note in self.notes:
             if note["id"] == note_id:
+                if {"title", "content", "archived"}.intersection(changes):
+                    changes["modified"] = _utc_now()
                 note.update(changes)
                 normalized = self._normalize(note)
                 note.clear()
@@ -79,6 +91,39 @@ class NoteStore:
                 self.save()
                 return deepcopy(note)
         raise KeyError(note_id)
+
+    def duplicate(self, note_id: str) -> dict:
+        source = self.get(note_id)
+        if source is None:
+            raise KeyError(note_id)
+
+        title = f"{source['title']} Copy"
+        used = {note["title"] for note in self.notes}
+        if title in used:
+            number = 2
+            while f"{source['title']} Copy {number}" in used:
+                number += 1
+            title = f"{source['title']} Copy {number}"
+
+        duplicate = self.create(title=title, content=source["content"])
+        self.update(
+            duplicate["id"],
+            width=source["width"],
+            height=source["height"],
+            collapsed=source["collapsed"],
+        )
+        return self.get(duplicate["id"]) or duplicate
+
+    def set_archived(self, note_id: str, archived: bool) -> dict:
+        return self.update(note_id, archived=archived, open=False if archived else False)
+
+    def delete(self, note_id: str) -> bool:
+        original_count = len(self.notes)
+        self.notes = [note for note in self.notes if note["id"] != note_id]
+        if len(self.notes) == original_count:
+            return False
+        self.save()
+        return True
 
     def _next_default_title(self) -> str:
         used = {str(note.get("title", "")).strip() for note in self.notes}
@@ -94,10 +139,15 @@ class NoteStore:
     def _normalize(note: dict) -> dict:
         width = note.get("width", DEFAULT_WIDTH)
         height = note.get("height", DEFAULT_HEIGHT)
+        created = note.get("created") if isinstance(note.get("created"), str) else _utc_now()
+        modified = note.get("modified") if isinstance(note.get("modified"), str) else created
         return {
             "id": str(note.get("id") or uuid4()),
             "title": str(note.get("title") or "New Note"),
             "content": str(note.get("content") or ""),
+            "created": created,
+            "modified": modified,
+            "archived": bool(note.get("archived", False)),
             "x": note.get("x") if isinstance(note.get("x"), int) else None,
             "y": note.get("y") if isinstance(note.get("y"), int) else None,
             "width": width if isinstance(width, int) else DEFAULT_WIDTH,

@@ -72,25 +72,26 @@ textarea {
   top: 0;
   left: 50%;
   display: flex;
-  width: max-content;
-  max-width: calc(100% - 176px);
+  width: calc(100% - 168px);
   height: 44px;
   align-items: center;
   justify-content: center;
   padding: 0 8px;
   overflow: hidden;
   color: var(--note-text);
+  cursor: default;
   font-size: 13px;
   font-weight: 700;
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
-  pointer-events: none;
   transform: translateX(-50%);
+  -webkit-app-region: no-drag;
 }
 
 .window-controls {
   position: absolute;
+  z-index: 2;
   top: 0;
   right: 0;
   display: flex;

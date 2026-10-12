@@ -20,6 +20,7 @@ const state = {
   headerLastScreenX: 0,
   headerLastScreenY: 0,
   headerMoved: false,
+  headerSecondClickCandidate: false,
   lastHeaderClickAt: 0,
   lastHeaderClickScreenX: 0,
   lastHeaderClickScreenY: 0,
@@ -132,16 +133,14 @@ function handleHeaderPointerDown(event) {
     event.screenX - state.lastHeaderClickScreenX,
     event.screenY - state.lastHeaderClickScreenY
   );
-  const isFastSecondClick =
+
+  state.headerSecondClickCandidate =
     state.lastHeaderClickAt > 0 &&
     now - state.lastHeaderClickAt <= DOUBLE_CLICK_MS &&
     clickDistance <= DOUBLE_CLICK_DISTANCE;
 
-  if (isFastSecondClick) {
+  if (state.headerSecondClickCandidate) {
     state.lastHeaderClickAt = 0;
-    event.preventDefault();
-    void toggleCollapsed();
-    return;
   }
 
   state.headerPointerId = event.pointerId;
@@ -171,6 +170,8 @@ function handleHeaderPointerMove(event) {
   }
 
   state.headerMoved = true;
+  state.headerSecondClickCandidate = false;
+  state.lastHeaderClickAt = 0;
 
   const deltaX = event.screenX - state.headerLastScreenX;
   const deltaY = event.screenY - state.headerLastScreenY;
@@ -192,12 +193,21 @@ function handleHeaderPointerEnd(event) {
     elements.header.releasePointerCapture(event.pointerId);
   }
 
-  if (!state.headerMoved && event.type === 'pointerup') {
+  if (
+    !state.headerMoved &&
+    event.type === 'pointerup' &&
+    state.headerSecondClickCandidate
+  ) {
+    state.headerSecondClickCandidate = false;
+    state.lastHeaderClickAt = 0;
+    void toggleCollapsed();
+  } else if (!state.headerMoved && event.type === 'pointerup') {
     state.lastHeaderClickAt = performance.now();
     state.lastHeaderClickScreenX = event.screenX;
     state.lastHeaderClickScreenY = event.screenY;
   } else {
     state.lastHeaderClickAt = 0;
+    state.headerSecondClickCandidate = false;
   }
 
   state.headerPointerId = null;

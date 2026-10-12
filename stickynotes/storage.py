@@ -12,6 +12,8 @@ from PySide6.QtCore import QStandardPaths
 
 DEFAULT_WIDTH = 320
 DEFAULT_HEIGHT = 352
+DEFAULT_COLOR = "yellow"
+VALID_COLORS = {"yellow", "pink", "blue", "green", "purple", "gray"}
 
 
 def _utc_now() -> str:
@@ -65,6 +67,7 @@ class NoteStore:
             "id": str(uuid4()),
             "title": title or self._next_default_title(),
             "content": content,
+            "color": DEFAULT_COLOR,
             "created": now,
             "modified": now,
             "archived": False,
@@ -82,7 +85,7 @@ class NoteStore:
     def update(self, note_id: str, **changes) -> dict:
         for note in self.notes:
             if note["id"] == note_id:
-                if {"title", "content", "archived"}.intersection(changes):
+                if {"title", "content", "color", "archived"}.intersection(changes):
                     changes["modified"] = _utc_now()
                 note.update(changes)
                 normalized = self._normalize(note)
@@ -108,6 +111,7 @@ class NoteStore:
         duplicate = self.create(title=title, content=source["content"])
         self.update(
             duplicate["id"],
+            color=source.get("color", DEFAULT_COLOR),
             width=source["width"],
             height=source["height"],
             collapsed=source["collapsed"],
@@ -115,7 +119,7 @@ class NoteStore:
         return self.get(duplicate["id"]) or duplicate
 
     def set_archived(self, note_id: str, archived: bool) -> dict:
-        return self.update(note_id, archived=archived, open=False if archived else False)
+        return self.update(note_id, archived=archived, open=False)
 
     def delete(self, note_id: str) -> bool:
         original_count = len(self.notes)
@@ -141,10 +145,14 @@ class NoteStore:
         height = note.get("height", DEFAULT_HEIGHT)
         created = note.get("created") if isinstance(note.get("created"), str) else _utc_now()
         modified = note.get("modified") if isinstance(note.get("modified"), str) else created
+        color = note.get("color") if isinstance(note.get("color"), str) else DEFAULT_COLOR
+        if color not in VALID_COLORS:
+            color = DEFAULT_COLOR
         return {
             "id": str(note.get("id") or uuid4()),
             "title": str(note.get("title") or "New Note"),
             "content": str(note.get("content") or ""),
+            "color": color,
             "created": created,
             "modified": modified,
             "archived": bool(note.get("archived", False)),

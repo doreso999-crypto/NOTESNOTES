@@ -225,6 +225,24 @@ class NoteWindowManager {
     return { collapsed: true };
   }
 
+  moveByForWebContents(webContentsId, deltaX, deltaY) {
+    const noteWindow = this.getWindowForWebContents(webContentsId);
+
+    if (!noteWindow || noteWindow.isDestroyed()) {
+      return;
+    }
+
+    const xDelta = Number.isFinite(deltaX) ? Math.round(deltaX) : 0;
+    const yDelta = Number.isFinite(deltaY) ? Math.round(deltaY) : 0;
+
+    if (xDelta === 0 && yDelta === 0) {
+      return;
+    }
+
+    const [x, y] = noteWindow.getPosition();
+    noteWindow.setPosition(x + xDelta, y + yDelta, false);
+  }
+
   closeForWebContents(webContentsId) {
     const noteWindow = this.getWindowForWebContents(webContentsId);
 

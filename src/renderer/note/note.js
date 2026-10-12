@@ -1,6 +1,10 @@
 'use strict';
 
 const SAVE_DELAY_MS = 300;
+const DOUBLE_CLICK_MS = 420;
+const DOUBLE_CLICK_DISTANCE = 10;
+const DRAG_THRESHOLD = 4;
+const RESIZE_STEP = 16;
 
 const state = {
   note: null,
@@ -10,9 +14,20 @@ const state = {
   saveChain: Promise.resolve(),
   toggleChain: Promise.resolve(),
   lastPersistedSnapshot: '',
-  dragPointerId: null,
-  lastScreenX: 0,
-  lastScreenY: 0
+  headerPointerId: null,
+  headerStartScreenX: 0,
+  headerStartScreenY: 0,
+  headerLastScreenX: 0,
+  headerLastScreenY: 0,
+  headerMoved: false,
+  lastHeaderClickAt: 0,
+  lastHeaderClickScreenX: 0,
+  lastHeaderClickScreenY: 0,
+  resizePointerId: null,
+  resizeHandle: null,
+  resizeEdge: null,
+  resizeLastScreenX: 0,
+  resizeLastScreenY: 0
 };
 
 const elements = {
@@ -24,7 +39,8 @@ const elements = {
   settingsMenu: document.querySelector('#settings-menu'),
   renameForm: document.querySelector('#rename-form'),
   renameInput: document.querySelector('#rename-input'),
-  closeButton: document.querySelector('#close-button')
+  closeButton: document.querySelector('#close-button'),
+  resizeHandles: document.querySelectorAll('[data-resize-edge]')
 };
 
 async function initialize() {
@@ -72,19 +88,17 @@ function bindEvents() {
     void handleClose();
   });
 
-  elements.header.addEventListener('dblclick', (event) => {
-    if (isHeaderControlTarget(event.target)) {
-      return;
-    }
-
-    event.preventDefault();
-    void toggleCollapsed();
-  });
-
   elements.header.addEventListener('pointerdown', handleHeaderPointerDown);
   elements.header.addEventListener('pointermove', handleHeaderPointerMove);
   elements.header.addEventListener('pointerup', handleHeaderPointerEnd);
   elements.header.addEventListener('pointercancel', handleHeaderPointerEnd);
+
+  for (const handle of elements.resizeHandles) {
+    handle.addEventListener('pointerdown', handleResizePointerDown);
+    handle.addEventListener('pointermove', handleResizePointerMove);
+    handle.addEventListener('pointerup', handleResizePointerEnd);
+    handle.addEventListener('pointercancel', handleResizePointerEnd);
+  }
 
   document.addEventListener('pointerdown', (event) => {
     if (
@@ -113,22 +127,56 @@ function handleHeaderPointerDown(event) {
     return;
   }
 
-  state.dragPointerId = event.pointerId;
-  state.lastScreenX = event.screenX;
-  state.lastScreenY = event.screenY;
+  const now = performance.now();
+  const clickDistance = Math.hypot(
+    event.screenX - state.lastHeaderClickScreenX,
+    event.screenY - state.lastHeaderClickScreenY
+  );
+  const isFastSecondClick =
+    state.lastHeaderClickAt > 0 &&
+    now - state.lastHeaderClickAt <= DOUBLE_CLICK_MS &&
+    clickDistance <= DOUBLE_CLICK_DISTANCE;
+
+  if (isFastSecondClick) {
+    state.lastHeaderClickAt = 0;
+    event.preventDefault();
+    void toggleCollapsed();
+    return;
+  }
+
+  state.headerPointerId = event.pointerId;
+  state.headerStartScreenX = event.screenX;
+  state.headerStartScreenY = event.screenY;
+  state.headerLastScreenX = event.screenX;
+  state.headerLastScreenY = event.screenY;
+  state.headerMoved = false;
   elements.header.setPointerCapture(event.pointerId);
 }
 
 function handleHeaderPointerMove(event) {
-  if (state.dragPointerId !== event.pointerId || (event.buttons & 1) !== 1) {
+  if (
+    state.headerPointerId !== event.pointerId ||
+    (event.buttons & 1) !== 1
+  ) {
     return;
   }
 
-  const deltaX = event.screenX - state.lastScreenX;
-  const deltaY = event.screenY - state.lastScreenY;
+  const totalDistance = Math.hypot(
+    event.screenX - state.headerStartScreenX,
+    event.screenY - state.headerStartScreenY
+  );
 
-  state.lastScreenX = event.screenX;
-  state.lastScreenY = event.screenY;
+  if (!state.headerMoved && totalDistance < DRAG_THRESHOLD) {
+    return;
+  }
+
+  state.headerMoved = true;
+
+  const deltaX = event.screenX - state.headerLastScreenX;
+  const deltaY = event.screenY - state.headerLastScreenY;
+
+  state.headerLastScreenX = event.screenX;
+  state.headerLastScreenY = event.screenY;
 
   if (deltaX !== 0 || deltaY !== 0) {
     window.stickyNote.moveBy(deltaX, deltaY);
@@ -136,7 +184,7 @@ function handleHeaderPointerMove(event) {
 }
 
 function handleHeaderPointerEnd(event) {
-  if (state.dragPointerId !== event.pointerId) {
+  if (state.headerPointerId !== event.pointerId) {
     return;
   }
 
@@ -144,7 +192,85 @@ function handleHeaderPointerEnd(event) {
     elements.header.releasePointerCapture(event.pointerId);
   }
 
-  state.dragPointerId = null;
+  if (!state.headerMoved && event.type === 'pointerup') {
+    state.lastHeaderClickAt = performance.now();
+    state.lastHeaderClickScreenX = event.screenX;
+    state.lastHeaderClickScreenY = event.screenY;
+  } else {
+    state.lastHeaderClickAt = 0;
+  }
+
+  state.headerPointerId = null;
+  state.headerMoved = false;
+}
+
+function handleResizePointerDown(event) {
+  if (event.button !== 0) {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  state.resizePointerId = event.pointerId;
+  state.resizeHandle = event.currentTarget;
+  state.resizeEdge = event.currentTarget.dataset.resizeEdge;
+  state.resizeLastScreenX = event.screenX;
+  state.resizeLastScreenY = event.screenY;
+  state.resizeHandle.setPointerCapture(event.pointerId);
+}
+
+function handleResizePointerMove(event) {
+  if (
+    state.resizePointerId !== event.pointerId ||
+    !state.resizeEdge ||
+    (event.buttons & 1) !== 1
+  ) {
+    return;
+  }
+
+  const rawDeltaX = event.screenX - state.resizeLastScreenX;
+  const rawDeltaY = event.screenY - state.resizeLastScreenY;
+  const usesHorizontalAxis =
+    state.resizeEdge.includes('e') || state.resizeEdge.includes('w');
+  const usesVerticalAxis =
+    state.resizeEdge.includes('n') || state.resizeEdge.includes('s');
+
+  const deltaX = usesHorizontalAxis ? snapPointerDelta(rawDeltaX) : 0;
+  const deltaY = usesVerticalAxis ? snapPointerDelta(rawDeltaY) : 0;
+
+  if (deltaX === 0 && deltaY === 0) {
+    return;
+  }
+
+  state.resizeLastScreenX += deltaX;
+  state.resizeLastScreenY += deltaY;
+  window.stickyNote.resizeBy(state.resizeEdge, deltaX, deltaY);
+}
+
+function handleResizePointerEnd(event) {
+  if (state.resizePointerId !== event.pointerId) {
+    return;
+  }
+
+  if (
+    state.resizeHandle &&
+    state.resizeHandle.hasPointerCapture(event.pointerId)
+  ) {
+    state.resizeHandle.releasePointerCapture(event.pointerId);
+  }
+
+  state.resizePointerId = null;
+  state.resizeHandle = null;
+  state.resizeEdge = null;
+}
+
+function snapPointerDelta(value) {
+  if (Math.abs(value) < RESIZE_STEP) {
+    return 0;
+  }
+
+  return Math.trunc(value / RESIZE_STEP) * RESIZE_STEP;
 }
 
 function scheduleSave() {
@@ -212,6 +338,9 @@ async function handleRename() {
 
 function toggleCollapsed() {
   closeSettings();
+
+  state.collapsed = !state.collapsed;
+  renderCollapsedState();
 
   state.toggleChain = state.toggleChain
     .catch(() => undefined)

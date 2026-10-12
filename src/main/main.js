@@ -53,6 +53,11 @@ if (!hasSingleInstanceLock) {
     }
   });
 
+  // Intentionally keep the process alive when the dashboard (and eventually
+  // all note windows) are closed. The tray is the application's persistent
+  // entry point; quitting is explicit through the tray menu or OS quit action.
+  app.on('window-all-closed', () => {});
+
   app.on('before-quit', () => {
     disposeDashboardIpc();
     destroyAppTray();

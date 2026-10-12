@@ -13,7 +13,6 @@ const state = {
 
 const elements = {
   stickyNote: document.querySelector('#sticky-note'),
-  header: document.querySelector('#note-header'),
   noteName: document.querySelector('#note-name'),
   content: document.querySelector('#note-content'),
   settingsButton: document.querySelector('#settings-button'),
@@ -68,11 +67,9 @@ function bindEvents() {
     void handleClose();
   });
 
-  elements.header.addEventListener('dblclick', (event) => {
-    if (event.target.closest('.window-controls, .settings-menu')) {
-      return;
-    }
-
+  elements.noteName.addEventListener('dblclick', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
     void toggleCollapsed();
   });
 

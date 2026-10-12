@@ -7,34 +7,72 @@ from PySide6.QtGui import QCloseEvent, QMouseEvent, QPainter, QResizeEvent
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
-    QInputDialog,
+    QHBoxLayout,
+    QLabel,
     QLineEdit,
     QPlainTextEdit,
+    QPushButton,
     QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
-from .storage import NoteStore
+from .storage import DEFAULT_COLOR, NoteStore
 
 HEADER_HEIGHT = 28
 COLLAPSED_HEIGHT = 30
+SETTINGS_HEIGHT = 118
 MIN_WIDTH = 224
 MIN_EXPANDED_HEIGHT = 160
 MAX_WIDTH = 1200
 MAX_HEIGHT = 1008
 RESIZE_STEP = 16
-SNAP_DISTANCE = 14
-ALIGN_DISTANCE = 10
+SNAP_DISTANCE = 9
+ALIGN_DISTANCE = 6
 MIN_SNAP_OVERLAP = 24
-SNAP_SETTLE_MS = 70
+SNAP_RELEASE_CHECK_MS = 60
 
-NOTE_BACKGROUND = "#fff2a8"
-HEADER_BACKGROUND = "#f6df76"
 TEXT_COLOR = "#342b08"
-BORDER_COLOR = "#c7b45f"
-HOVER_COLOR = "#ead15f"
 DANGER_HOVER = "#e6a06f"
+
+NOTE_PALETTES = {
+    "yellow": {
+        "body": "#fff2a8",
+        "header": "#f6df76",
+        "border": "#c7b45f",
+        "hover": "#ead15f",
+    },
+    "pink": {
+        "body": "#ffdce7",
+        "header": "#f5bcd0",
+        "border": "#cb91a5",
+        "hover": "#eaaac0",
+    },
+    "blue": {
+        "body": "#dcefff",
+        "header": "#b9dcf7",
+        "border": "#8bb6d6",
+        "hover": "#a7d1ef",
+    },
+    "green": {
+        "body": "#def5d5",
+        "header": "#bfe8ad",
+        "border": "#94bf82",
+        "hover": "#afe09a",
+    },
+    "purple": {
+        "body": "#eadfff",
+        "header": "#d2bff3",
+        "border": "#a995ce",
+        "hover": "#c5afea",
+    },
+    "gray": {
+        "body": "#e9ecef",
+        "header": "#cfd4d8",
+        "border": "#9fa5ab",
+        "hover": "#c0c5ca",
+    },
+}
 
 
 class HeaderWidget(QWidget):
@@ -48,13 +86,17 @@ class HeaderWidget(QWidget):
         self.menu_button = QToolButton(self)
         self.menu_button.setText("⋯")
         self.menu_button.setToolTip("Settings")
-        self.menu_button.clicked.connect(self.owner.rename_note)
+        self.menu_button.clicked.connect(self.owner.toggle_settings)
 
         self.close_button = QToolButton(self)
         self.close_button.setText("×")
         self.close_button.setToolTip("Close")
         self.close_button.clicked.connect(self.owner.close)
 
+        self.apply_theme()
+
+    def apply_theme(self) -> None:
+        hover = self.owner.colors["hover"]
         common = f"""
             QToolButton {{
                 border: 0;
@@ -64,12 +106,13 @@ class HeaderWidget(QWidget):
                 font-size: 15px;
                 padding: 0;
             }}
-            QToolButton:hover {{ background: {HOVER_COLOR}; }}
+            QToolButton:hover {{ background: {hover}; }}
         """
         self.menu_button.setStyleSheet(common)
         self.close_button.setStyleSheet(
             common + f"QToolButton:hover {{ background: {DANGER_HOVER}; }}"
         )
+        self.update()
 
     def resizeEvent(self, event: QResizeEvent) -> None:
         button_size = HEADER_HEIGHT
@@ -81,7 +124,7 @@ class HeaderWidget(QWidget):
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
-        painter.fillRect(self.rect(), HEADER_BACKGROUND)
+        painter.fillRect(self.rect(), self.owner.colors["header"])
         painter.setPen(TEXT_COLOR)
         font = painter.font()
         font.setBold(True)
@@ -106,10 +149,7 @@ class HeaderWidget(QWidget):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
-        if (
-            self._press_global is not None
-            and event.buttons() & Qt.MouseButton.LeftButton
-        ):
+        if self._press_global is not None and event.buttons() & Qt.MouseButton.LeftButton:
             distance = (event.globalPosition().toPoint() - self._press_global).manhattanLength()
             if distance >= QApplication.startDragDistance():
                 handle = self.owner.windowHandle()
@@ -122,6 +162,8 @@ class HeaderWidget(QWidget):
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         self._press_global = None
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.owner.request_position_snap()
         super().mouseReleaseEvent(event)
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
@@ -131,6 +173,111 @@ class HeaderWidget(QWidget):
             event.accept()
             return
         super().mouseDoubleClickEvent(event)
+
+
+class SettingsPanel(QFrame):
+    def __init__(self, owner: "NoteWindow") -> None:
+        super().__init__(owner)
+        self.owner = owner
+        self.setObjectName("settingsPanel")
+        self.setFixedHeight(SETTINGS_HEIGHT)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(10, 8, 10, 8)
+        root.setSpacing(6)
+
+        name_label = QLabel("Note name")
+        name_label.setObjectName("settingsLabel")
+        root.addWidget(name_label)
+
+        name_row = QHBoxLayout()
+        name_row.setSpacing(6)
+        self.name_input = QLineEdit(owner.note_title)
+        self.name_input.setObjectName("settingsName")
+        self.name_input.returnPressed.connect(owner.apply_settings_name)
+        name_row.addWidget(self.name_input, 1)
+
+        save_button = QPushButton("Save")
+        save_button.setObjectName("settingsSave")
+        save_button.clicked.connect(owner.apply_settings_name)
+        name_row.addWidget(save_button)
+        root.addLayout(name_row)
+
+        color_label = QLabel("Color")
+        color_label.setObjectName("settingsLabel")
+        root.addWidget(color_label)
+
+        colors_row = QHBoxLayout()
+        colors_row.setSpacing(7)
+        self.color_buttons: dict[str, QToolButton] = {}
+        for color_name, palette in NOTE_PALETTES.items():
+            button = QToolButton()
+            button.setFixedSize(24, 24)
+            button.setToolTip(color_name.title())
+            button.clicked.connect(
+                lambda checked=False, selected=color_name: owner.set_note_color(selected)
+            )
+            self.color_buttons[color_name] = button
+            colors_row.addWidget(button)
+        colors_row.addStretch(1)
+        root.addLayout(colors_row)
+
+        self.apply_theme()
+
+    def sync(self) -> None:
+        self.name_input.setText(self.owner.note_title)
+        self.apply_theme()
+
+    def apply_theme(self) -> None:
+        colors = self.owner.colors
+        self.setStyleSheet(
+            f"""
+            QFrame#settingsPanel {{
+                background: {colors['body']};
+                border-top: 1px solid {colors['border']};
+                border-bottom: 1px solid {colors['border']};
+                border-left: 0;
+                border-right: 0;
+            }}
+            QLabel#settingsLabel {{
+                background: transparent;
+                color: {TEXT_COLOR};
+                font-size: 10px;
+                font-weight: 700;
+            }}
+            QLineEdit#settingsName {{
+                background: {colors['header']};
+                color: {TEXT_COLOR};
+                border: 1px solid {colors['border']};
+                border-radius: 0;
+                padding: 4px 6px;
+            }}
+            QPushButton#settingsSave {{
+                background: {colors['header']};
+                color: {TEXT_COLOR};
+                border: 1px solid {colors['border']};
+                border-radius: 0;
+                padding: 4px 9px;
+                font-weight: 700;
+            }}
+            QPushButton#settingsSave:hover {{ background: {colors['hover']}; }}
+            """
+        )
+
+        for color_name, button in self.color_buttons.items():
+            palette = NOTE_PALETTES[color_name]
+            selected = color_name == self.owner.note_color
+            border_width = 3 if selected else 1
+            button.setStyleSheet(
+                f"""
+                QToolButton {{
+                    background: {palette['body']};
+                    border: {border_width}px solid {palette['border']};
+                    border-radius: 0;
+                    padding: 0;
+                }}
+                """
+            )
 
 
 class ResizeHandle(QWidget):
@@ -164,6 +311,9 @@ class NoteWindow(QWidget):
         self.store = store
         self.note_id = note["id"]
         self.note_title = note["title"]
+        self.note_color = note.get("color", DEFAULT_COLOR)
+        if self.note_color not in NOTE_PALETTES:
+            self.note_color = DEFAULT_COLOR
         self._collapsed = bool(note.get("collapsed", False))
         self._expanded_height = max(MIN_EXPANDED_HEIGHT, int(note.get("height", 352)))
         self._on_title_changed = on_title_changed
@@ -190,8 +340,8 @@ class NoteWindow(QWidget):
 
         self._position_snap_timer = QTimer(self)
         self._position_snap_timer.setSingleShot(True)
-        self._position_snap_timer.setInterval(SNAP_SETTLE_MS)
-        self._position_snap_timer.timeout.connect(self._snap_position)
+        self._position_snap_timer.setInterval(SNAP_RELEASE_CHECK_MS)
+        self._position_snap_timer.timeout.connect(self._snap_position_if_released)
 
         self.setObjectName("noteRoot")
         self.setWindowTitle(self.note_title)
@@ -201,27 +351,10 @@ class NoteWindow(QWidget):
             | Qt.WindowType.NoDropShadowWindowHint
         )
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setAutoFillBackground(False)
         self.setMinimumWidth(MIN_WIDTH)
         self.setMaximumWidth(MAX_WIDTH)
-
-        self.setStyleSheet(
-            f"""
-            QWidget#noteRoot {{
-                background: {NOTE_BACKGROUND};
-                border: 1px solid {BORDER_COLOR};
-                border-radius: 0;
-            }}
-            QPlainTextEdit {{
-                border: 0;
-                border-radius: 0;
-                background: {NOTE_BACKGROUND};
-                color: {TEXT_COLOR};
-                padding: 10px;
-                font-size: 14px;
-                selection-background-color: #dcc34f;
-            }}
-            """
-        )
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(1, 1, 1, 1)
@@ -229,6 +362,10 @@ class NoteWindow(QWidget):
 
         self.header = HeaderWidget(self)
         layout.addWidget(self.header)
+
+        self.settings_panel = SettingsPanel(self)
+        self.settings_panel.hide()
+        layout.addWidget(self.settings_panel)
 
         self.editor = QPlainTextEdit(self)
         self.editor.setPlainText(note.get("content", ""))
@@ -240,6 +377,7 @@ class NoteWindow(QWidget):
         self.editor.textChanged.connect(self._text_save_timer.start)
         layout.addWidget(self.editor, 1)
 
+        self._apply_theme()
         self._handles = self._create_resize_handles()
 
         width = self._snap(int(note.get("width", 320)), MIN_WIDTH, MAX_WIDTH)
@@ -247,6 +385,35 @@ class NoteWindow(QWidget):
             self.move(note["x"], note["y"])
         self.resize(width, COLLAPSED_HEIGHT if self._collapsed else self._expanded_height)
         self._apply_collapsed_state(initial=True)
+
+    @property
+    def colors(self) -> dict[str, str]:
+        return NOTE_PALETTES[self.note_color]
+
+    def _apply_theme(self) -> None:
+        colors = self.colors
+        self.setStyleSheet(
+            f"""
+            QWidget#noteRoot {{
+                background: {colors['body']};
+                border: 1px solid {colors['border']};
+                border-radius: 0;
+            }}
+            QPlainTextEdit {{
+                border: 0;
+                border-radius: 0;
+                background: {colors['body']};
+                color: {TEXT_COLOR};
+                padding: 10px;
+                font-size: 14px;
+                selection-background-color: {colors['header']};
+            }}
+            """
+        )
+        if hasattr(self, "header"):
+            self.header.apply_theme()
+        if hasattr(self, "settings_panel"):
+            self.settings_panel.apply_theme()
 
     def _create_resize_handles(self) -> dict[str, ResizeHandle]:
         return {
@@ -294,30 +461,48 @@ class NoteWindow(QWidget):
     def moveEvent(self, event) -> None:
         super().moveEvent(event)
         self._state_save_timer.start()
-
-        if self._position_snapping:
-            return
-
-        if QApplication.keyboardModifiers() & Qt.KeyboardModifier.AltModifier:
-            self._position_snap_timer.stop()
-        else:
-            self._position_snap_timer.start()
+        if not self._position_snapping:
+            self.request_position_snap()
 
     def closeEvent(self, event: QCloseEvent) -> None:
         self.save_text()
         self.save_window_state(open_state=self._is_quitting())
         event.accept()
 
-    def rename_note(self) -> None:
-        title, accepted = QInputDialog.getText(
-            self,
-            "Rename note",
-            "Note name:",
-            QLineEdit.EchoMode.Normal,
-            self.note_title,
-        )
-        title = title.strip()
-        if not accepted or not title:
+    def toggle_settings(self) -> None:
+        if self.settings_panel.isVisible():
+            self.close_settings()
+            return
+
+        self.settings_panel.sync()
+        self.settings_panel.show()
+        if self._collapsed:
+            target_height = COLLAPSED_HEIGHT + SETTINGS_HEIGHT
+            self.setMinimumHeight(target_height)
+            self.setMaximumHeight(target_height)
+            self.resize(self.width(), target_height)
+        self.settings_panel.name_input.setFocus(Qt.FocusReason.MouseFocusReason)
+        self.settings_panel.name_input.selectAll()
+        self._raise_resize_handles()
+
+    def close_settings(self) -> None:
+        if not self.settings_panel.isVisible():
+            return
+        self.settings_panel.hide()
+        if self._collapsed:
+            self.setMinimumHeight(COLLAPSED_HEIGHT)
+            self.setMaximumHeight(COLLAPSED_HEIGHT)
+            self.resize(self.width(), COLLAPSED_HEIGHT)
+        self._raise_resize_handles()
+
+    def apply_settings_name(self) -> None:
+        title = self.settings_panel.name_input.text().strip()
+        if not title:
+            self.settings_panel.name_input.setText(self.note_title)
+            self.settings_panel.name_input.selectAll()
+            return
+
+        if title == self.note_title:
             return
 
         self.note_title = title
@@ -326,7 +511,18 @@ class NoteWindow(QWidget):
         self.store.update(self.note_id, title=title)
         self._on_title_changed()
 
+    def set_note_color(self, color_name: str) -> None:
+        if color_name not in NOTE_PALETTES or color_name == self.note_color:
+            return
+        self.note_color = color_name
+        self.store.update(self.note_id, color=color_name)
+        self._apply_theme()
+        self.settings_panel.apply_theme()
+        self.header.update()
+        self._on_title_changed()
+
     def toggle_collapsed(self) -> None:
+        self.close_settings()
         if not self._collapsed:
             self._expanded_height = max(MIN_EXPANDED_HEIGHT, self.height())
         self._collapsed = not self._collapsed
@@ -336,10 +532,15 @@ class NoteWindow(QWidget):
     def _apply_collapsed_state(self, initial: bool = False) -> None:
         if self._collapsed:
             self.editor.hide()
-            self.setMinimumHeight(COLLAPSED_HEIGHT)
-            self.setMaximumHeight(COLLAPSED_HEIGHT)
-            if not initial or self.height() != COLLAPSED_HEIGHT:
-                self.resize(self.width(), COLLAPSED_HEIGHT)
+            target_height = (
+                COLLAPSED_HEIGHT + SETTINGS_HEIGHT
+                if self.settings_panel.isVisible()
+                else COLLAPSED_HEIGHT
+            )
+            self.setMinimumHeight(target_height)
+            self.setMaximumHeight(target_height)
+            if not initial or self.height() != target_height:
+                self.resize(self.width(), target_height)
         else:
             self.setMaximumHeight(MAX_HEIGHT)
             self.setMinimumHeight(MIN_EXPANDED_HEIGHT)
@@ -356,10 +557,12 @@ class NoteWindow(QWidget):
 
     def _configure_size_increment(self) -> None:
         increment = QSize(RESIZE_STEP, 1 if self._collapsed else RESIZE_STEP)
-        base_size = QSize(
-            MIN_WIDTH,
-            COLLAPSED_HEIGHT if self._collapsed else MIN_EXPANDED_HEIGHT,
+        base_height = (
+            COLLAPSED_HEIGHT + SETTINGS_HEIGHT
+            if self._collapsed and self.settings_panel.isVisible()
+            else COLLAPSED_HEIGHT if self._collapsed else MIN_EXPANDED_HEIGHT
         )
+        base_size = QSize(MIN_WIDTH, base_height)
         self.setBaseSize(base_size)
         self.setSizeIncrement(increment)
         handle = self.windowHandle()
@@ -396,11 +599,14 @@ class NoteWindow(QWidget):
             return
 
         target_width = self._snap(self.width(), MIN_WIDTH, MAX_WIDTH)
-        target_height = (
-            COLLAPSED_HEIGHT
-            if self._collapsed
-            else self._snap(self.height(), MIN_EXPANDED_HEIGHT, MAX_HEIGHT)
-        )
+        if self._collapsed:
+            target_height = (
+                COLLAPSED_HEIGHT + SETTINGS_HEIGHT
+                if self.settings_panel.isVisible()
+                else COLLAPSED_HEIGHT
+            )
+        else:
+            target_height = self._snap(self.height(), MIN_EXPANDED_HEIGHT, MAX_HEIGHT)
 
         if target_width == self.width() and target_height == self.height():
             return
@@ -408,6 +614,17 @@ class NoteWindow(QWidget):
         self._snapping = True
         self.resize(target_width, target_height)
         self._snapping = False
+
+    def request_position_snap(self) -> None:
+        if self._position_snapping:
+            return
+        self._position_snap_timer.start()
+
+    def _snap_position_if_released(self) -> None:
+        if QApplication.mouseButtons() & Qt.MouseButton.LeftButton:
+            self._position_snap_timer.start()
+            return
+        self._snap_position()
 
     def _snap_position(self) -> None:
         if self._position_snapping:
@@ -427,23 +644,11 @@ class NoteWindow(QWidget):
         best_y_distance = SNAP_DISTANCE + 1
 
         for other in targets:
-            vertical_overlap = (
-                min(current.bottom(), other.bottom())
-                - max(current.top(), other.top())
-                + 1
-            )
-            horizontal_overlap = (
-                min(current.right(), other.right())
-                - max(current.left(), other.left())
-                + 1
-            )
+            vertical_overlap = min(current.bottom(), other.bottom()) - max(current.top(), other.top()) + 1
+            horizontal_overlap = min(current.right(), other.right()) - max(current.left(), other.left()) + 1
 
             if vertical_overlap >= MIN_SNAP_OVERLAP:
-                x_candidates = (
-                    other.right() + 1,
-                    other.left() - current.width(),
-                )
-                for candidate_x in x_candidates:
+                for candidate_x in (other.right() + 1, other.left() - current.width()):
                     distance = abs(candidate_x - current.x())
                     if distance <= SNAP_DISTANCE and distance < best_x_distance:
                         best_x_distance = distance
@@ -454,22 +659,14 @@ class NoteWindow(QWidget):
                     abs((current.right() + 1) - other.left()),
                 )
                 if horizontal_edge_distance <= SNAP_DISTANCE:
-                    y_candidates = (
-                        other.top(),
-                        other.bottom() - current.height() + 1,
-                    )
-                    for candidate_y in y_candidates:
+                    for candidate_y in (other.top(), other.bottom() - current.height() + 1):
                         distance = abs(candidate_y - current.y())
                         if distance <= ALIGN_DISTANCE and distance < best_y_distance:
                             best_y_distance = distance
                             target_y = candidate_y
 
             if horizontal_overlap >= MIN_SNAP_OVERLAP:
-                y_candidates = (
-                    other.bottom() + 1,
-                    other.top() - current.height(),
-                )
-                for candidate_y in y_candidates:
+                for candidate_y in (other.bottom() + 1, other.top() - current.height()):
                     distance = abs(candidate_y - current.y())
                     if distance <= SNAP_DISTANCE and distance < best_y_distance:
                         best_y_distance = distance
@@ -480,11 +677,7 @@ class NoteWindow(QWidget):
                     abs((current.bottom() + 1) - other.top()),
                 )
                 if vertical_edge_distance <= SNAP_DISTANCE:
-                    x_candidates = (
-                        other.left(),
-                        other.right() - current.width() + 1,
-                    )
-                    for candidate_x in x_candidates:
+                    for candidate_x in (other.left(), other.right() - current.width() + 1):
                         distance = abs(candidate_x - current.x())
                         if distance <= ALIGN_DISTANCE and distance < best_x_distance:
                             best_x_distance = distance

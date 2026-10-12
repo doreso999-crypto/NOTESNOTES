@@ -123,18 +123,44 @@ class NoteStore {
     });
   }
 
-  async update(noteId, patch) {
+  async updateContent(noteId, { title, content }) {
     return this.#mutate(() => {
       const note = this.#requireNote(noteId);
-      const allowedKeys = ['title', 'content', 'window', 'alwaysOnTop'];
 
-      for (const key of allowedKeys) {
-        if (Object.hasOwn(patch, key)) {
-          note[key] = clone(patch[key]);
-        }
+      if (typeof title === 'string') {
+        note.title = title;
+      }
+
+      if (typeof content === 'string') {
+        note.content = content;
       }
 
       note.modifiedAt = new Date().toISOString();
+      return note;
+    });
+  }
+
+  async updateWindowState(noteId, windowState) {
+    return this.#mutate(() => {
+      const note = this.#requireNote(noteId);
+      note.window = {
+        x: Number.isFinite(windowState.x) ? Math.round(windowState.x) : null,
+        y: Number.isFinite(windowState.y) ? Math.round(windowState.y) : null,
+        width: Number.isFinite(windowState.width)
+          ? Math.round(windowState.width)
+          : DEFAULT_WINDOW_STATE.width,
+        height: Number.isFinite(windowState.height)
+          ? Math.round(windowState.height)
+          : DEFAULT_WINDOW_STATE.height
+      };
+      return note;
+    });
+  }
+
+  async setAlwaysOnTop(noteId, alwaysOnTop) {
+    return this.#mutate(() => {
+      const note = this.#requireNote(noteId);
+      note.alwaysOnTop = Boolean(alwaysOnTop);
       return note;
     });
   }

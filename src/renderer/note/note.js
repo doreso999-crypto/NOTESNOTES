@@ -8,11 +8,16 @@ const state = {
   collapsed: false,
   saveTimer: null,
   saveChain: Promise.resolve(),
-  lastPersistedSnapshot: ''
+  toggleChain: Promise.resolve(),
+  lastPersistedSnapshot: '',
+  dragPointerId: null,
+  lastScreenX: 0,
+  lastScreenY: 0
 };
 
 const elements = {
   stickyNote: document.querySelector('#sticky-note'),
+  header: document.querySelector('#note-header'),
   noteName: document.querySelector('#note-name'),
   content: document.querySelector('#note-content'),
   settingsButton: document.querySelector('#settings-button'),
@@ -33,7 +38,7 @@ async function initialize() {
     elements.content.value = note.content ?? '';
     elements.renameInput.value = state.title;
     state.lastPersistedSnapshot = getEditorSnapshot();
-    elements.stickyNote.classList.toggle('is-collapsed', state.collapsed);
+    renderCollapsedState();
     renderTitle();
 
     if (!state.collapsed) {
@@ -67,11 +72,19 @@ function bindEvents() {
     void handleClose();
   });
 
-  elements.noteName.addEventListener('dblclick', (event) => {
+  elements.header.addEventListener('dblclick', (event) => {
+    if (isHeaderControlTarget(event.target)) {
+      return;
+    }
+
     event.preventDefault();
-    event.stopPropagation();
     void toggleCollapsed();
   });
+
+  elements.header.addEventListener('pointerdown', handleHeaderPointerDown);
+  elements.header.addEventListener('pointermove', handleHeaderPointerMove);
+  elements.header.addEventListener('pointerup', handleHeaderPointerEnd);
+  elements.header.addEventListener('pointercancel', handleHeaderPointerEnd);
 
   document.addEventListener('pointerdown', (event) => {
     if (
@@ -89,6 +102,49 @@ function bindEvents() {
       state.saveTimer = null;
     }
   });
+}
+
+function isHeaderControlTarget(target) {
+  return Boolean(target.closest('.window-controls, .settings-menu'));
+}
+
+function handleHeaderPointerDown(event) {
+  if (event.button !== 0 || isHeaderControlTarget(event.target)) {
+    return;
+  }
+
+  state.dragPointerId = event.pointerId;
+  state.lastScreenX = event.screenX;
+  state.lastScreenY = event.screenY;
+  elements.header.setPointerCapture(event.pointerId);
+}
+
+function handleHeaderPointerMove(event) {
+  if (state.dragPointerId !== event.pointerId || (event.buttons & 1) !== 1) {
+    return;
+  }
+
+  const deltaX = event.screenX - state.lastScreenX;
+  const deltaY = event.screenY - state.lastScreenY;
+
+  state.lastScreenX = event.screenX;
+  state.lastScreenY = event.screenY;
+
+  if (deltaX !== 0 || deltaY !== 0) {
+    window.stickyNote.moveBy(deltaX, deltaY);
+  }
+}
+
+function handleHeaderPointerEnd(event) {
+  if (state.dragPointerId !== event.pointerId) {
+    return;
+  }
+
+  if (elements.header.hasPointerCapture(event.pointerId)) {
+    elements.header.releasePointerCapture(event.pointerId);
+  }
+
+  state.dragPointerId = null;
 }
 
 function scheduleSave() {
@@ -154,23 +210,28 @@ async function handleRename() {
   }
 }
 
-async function toggleCollapsed() {
+function toggleCollapsed() {
   closeSettings();
 
-  try {
-    const result = await window.stickyNote.toggleCollapsed();
-    state.collapsed = Boolean(result?.collapsed);
-    elements.stickyNote.classList.toggle('is-collapsed', state.collapsed);
+  state.toggleChain = state.toggleChain
+    .catch(() => undefined)
+    .then(async () => {
+      const result = await window.stickyNote.toggleCollapsed();
+      state.collapsed = Boolean(result?.collapsed);
+      renderCollapsedState();
 
-    if (!state.collapsed) {
-      elements.content.focus();
-    }
+      if (!state.collapsed) {
+        elements.content.focus();
+      }
 
-    return state.collapsed;
-  } catch (error) {
-    console.error('Unable to collapse sticky note.', error);
-    return state.collapsed;
-  }
+      return state.collapsed;
+    })
+    .catch((error) => {
+      console.error('Unable to toggle sticky note.', error);
+      return state.collapsed;
+    });
+
+  return state.toggleChain;
 }
 
 async function handleClose() {
@@ -202,6 +263,10 @@ function closeSettings() {
   elements.settingsMenu.hidden = true;
   elements.settingsButton.setAttribute('aria-expanded', 'false');
   elements.renameInput.value = state.title;
+}
+
+function renderCollapsedState() {
+  elements.stickyNote.classList.toggle('is-collapsed', state.collapsed);
 }
 
 function renderTitle() {

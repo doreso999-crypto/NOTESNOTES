@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QPoint, QSize, Qt, QTimer
+from PySide6.QtCore import QPoint, QRect, QSize, Qt, QTimer
 from PySide6.QtGui import QCloseEvent, QMouseEvent, QPainter, QResizeEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -24,6 +24,10 @@ MIN_EXPANDED_HEIGHT = 160
 MAX_WIDTH = 1200
 MAX_HEIGHT = 1008
 RESIZE_STEP = 16
+SNAP_DISTANCE = 14
+ALIGN_DISTANCE = 10
+MIN_SNAP_OVERLAP = 24
+SNAP_SETTLE_MS = 70
 
 NOTE_BACKGROUND = "#fff2a8"
 HEADER_BACKGROUND = "#f6df76"
@@ -154,6 +158,7 @@ class NoteWindow(QWidget):
         note: dict,
         on_title_changed: Callable[[], None],
         is_quitting: Callable[[], bool],
+        snap_targets: Callable[[], list[QRect]],
     ) -> None:
         super().__init__()
         self.store = store
@@ -163,7 +168,9 @@ class NoteWindow(QWidget):
         self._expanded_height = max(MIN_EXPANDED_HEIGHT, int(note.get("height", 352)))
         self._on_title_changed = on_title_changed
         self._is_quitting = is_quitting
+        self._snap_targets = snap_targets
         self._snapping = False
+        self._position_snapping = False
         self._handles: dict[str, ResizeHandle] = {}
 
         self._text_save_timer = QTimer(self)
@@ -180,6 +187,11 @@ class NoteWindow(QWidget):
         self._snap_timer.setSingleShot(True)
         self._snap_timer.setInterval(90)
         self._snap_timer.timeout.connect(self._snap_size)
+
+        self._position_snap_timer = QTimer(self)
+        self._position_snap_timer.setSingleShot(True)
+        self._position_snap_timer.setInterval(SNAP_SETTLE_MS)
+        self._position_snap_timer.timeout.connect(self._snap_position)
 
         self.setObjectName("noteRoot")
         self.setWindowTitle(self.note_title)
@@ -282,6 +294,14 @@ class NoteWindow(QWidget):
     def moveEvent(self, event) -> None:
         super().moveEvent(event)
         self._state_save_timer.start()
+
+        if self._position_snapping:
+            return
+
+        if QApplication.keyboardModifiers() & Qt.KeyboardModifier.AltModifier:
+            self._position_snap_timer.stop()
+        else:
+            self._position_snap_timer.start()
 
     def closeEvent(self, event: QCloseEvent) -> None:
         self.save_text()
@@ -388,6 +408,95 @@ class NoteWindow(QWidget):
         self._snapping = True
         self.resize(target_width, target_height)
         self._snapping = False
+
+    def _snap_position(self) -> None:
+        if self._position_snapping:
+            return
+
+        if QApplication.keyboardModifiers() & Qt.KeyboardModifier.AltModifier:
+            return
+
+        targets = self._snap_targets()
+        if not targets:
+            return
+
+        current = QRect(self.geometry())
+        target_x = current.x()
+        target_y = current.y()
+        best_x_distance = SNAP_DISTANCE + 1
+        best_y_distance = SNAP_DISTANCE + 1
+
+        for other in targets:
+            vertical_overlap = (
+                min(current.bottom(), other.bottom())
+                - max(current.top(), other.top())
+                + 1
+            )
+            horizontal_overlap = (
+                min(current.right(), other.right())
+                - max(current.left(), other.left())
+                + 1
+            )
+
+            if vertical_overlap >= MIN_SNAP_OVERLAP:
+                x_candidates = (
+                    other.right() + 1,
+                    other.left() - current.width(),
+                )
+                for candidate_x in x_candidates:
+                    distance = abs(candidate_x - current.x())
+                    if distance <= SNAP_DISTANCE and distance < best_x_distance:
+                        best_x_distance = distance
+                        target_x = candidate_x
+
+                horizontal_edge_distance = min(
+                    abs(current.left() - (other.right() + 1)),
+                    abs((current.right() + 1) - other.left()),
+                )
+                if horizontal_edge_distance <= SNAP_DISTANCE:
+                    y_candidates = (
+                        other.top(),
+                        other.bottom() - current.height() + 1,
+                    )
+                    for candidate_y in y_candidates:
+                        distance = abs(candidate_y - current.y())
+                        if distance <= ALIGN_DISTANCE and distance < best_y_distance:
+                            best_y_distance = distance
+                            target_y = candidate_y
+
+            if horizontal_overlap >= MIN_SNAP_OVERLAP:
+                y_candidates = (
+                    other.bottom() + 1,
+                    other.top() - current.height(),
+                )
+                for candidate_y in y_candidates:
+                    distance = abs(candidate_y - current.y())
+                    if distance <= SNAP_DISTANCE and distance < best_y_distance:
+                        best_y_distance = distance
+                        target_y = candidate_y
+
+                vertical_edge_distance = min(
+                    abs(current.top() - (other.bottom() + 1)),
+                    abs((current.bottom() + 1) - other.top()),
+                )
+                if vertical_edge_distance <= SNAP_DISTANCE:
+                    x_candidates = (
+                        other.left(),
+                        other.right() - current.width() + 1,
+                    )
+                    for candidate_x in x_candidates:
+                        distance = abs(candidate_x - current.x())
+                        if distance <= ALIGN_DISTANCE and distance < best_x_distance:
+                            best_x_distance = distance
+                            target_x = candidate_x
+
+        if target_x == current.x() and target_y == current.y():
+            return
+
+        self._position_snapping = True
+        self.move(target_x, target_y)
+        self._position_snapping = False
+        self._state_save_timer.start()
 
     def save_text(self) -> None:
         self.store.update(self.note_id, content=self.editor.toPlainText())

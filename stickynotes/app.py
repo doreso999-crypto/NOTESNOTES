@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 
-from PySide6.QtCore import QObject, Qt
+from PySide6.QtCore import QObject, QRect, Qt
 from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
@@ -59,6 +59,7 @@ class StickyNotesApplication(QObject):
                 note,
                 on_title_changed=self._on_note_title_changed,
                 is_quitting=lambda: self.quitting,
+                snap_targets=lambda note_id=note_id: self._snap_targets(note_id),
             )
             self.windows[note_id] = window
 
@@ -120,6 +121,14 @@ class StickyNotesApplication(QObject):
     def _on_note_title_changed(self) -> None:
         self.dashboard.refresh()
         self._rebuild_tray_menu()
+
+    def _snap_targets(self, source_note_id: str) -> list[QRect]:
+        targets: list[QRect] = []
+        for note_id, window in self.windows.items():
+            if note_id == source_note_id or not window.isVisible():
+                continue
+            targets.append(QRect(window.geometry()))
+        return targets
 
     def _rebuild_tray_menu(self) -> None:
         menu = QMenu()

@@ -30,11 +30,16 @@ async function initialize() {
     const note = await window.stickyNote.getCurrent();
     state.note = note;
     state.title = note.title?.trim() || 'New Note';
+    state.collapsed = Boolean(note.collapsed);
     elements.content.value = note.content ?? '';
     elements.renameInput.value = state.title;
     state.lastPersistedSnapshot = getEditorSnapshot();
+    elements.stickyNote.classList.toggle('is-collapsed', state.collapsed);
     renderTitle();
-    elements.content.focus();
+
+    if (!state.collapsed) {
+      elements.content.focus();
+    }
   } catch (error) {
     console.error('Unable to load sticky note.', error);
   }
@@ -159,6 +164,11 @@ async function toggleCollapsed() {
     const result = await window.stickyNote.toggleCollapsed();
     state.collapsed = Boolean(result?.collapsed);
     elements.stickyNote.classList.toggle('is-collapsed', state.collapsed);
+
+    if (!state.collapsed) {
+      elements.content.focus();
+    }
+
     return state.collapsed;
   } catch (error) {
     console.error('Unable to collapse sticky note.', error);

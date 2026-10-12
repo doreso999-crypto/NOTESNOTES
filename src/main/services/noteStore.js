@@ -70,6 +70,21 @@ class NoteStore {
       }
 
       this.notes = parsed;
+
+      let migratedDefaultTitles = false;
+
+      for (const note of this.notes) {
+        const title = typeof note.title === 'string' ? note.title.trim() : '';
+
+        if (!title || title === 'Untitled note') {
+          note.title = getNextNewNoteTitle(this.notes);
+          migratedDefaultTitles = true;
+        }
+      }
+
+      if (migratedDefaultTitles) {
+        await this.#persist();
+      }
     } catch (error) {
       if (error.code !== 'ENOENT') {
         throw error;

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+    />
+    <title>StickyNotes Pro</title>
+    <link rel="stylesheet" href="note.css" />
+    <script src="note.js" defer></script>
+  </head>
+  <body>
+    <main class="sticky-note">
+      <header class="note-titlebar">
+        <div class="note-drag-region" aria-hidden="true">
+          <span class="note-handle">StickyNotes Pro</span>
+        </div>
+
+        <div class="window-controls" aria-label="Window controls">
+          <button
+            id="pin-button"
+            class="window-button"
+            type="button"
+            aria-label="Keep note on top"
+            aria-pressed="false"
+            title="Keep on top"
+          >
+            Pin
+          </button>
+          <button
+            id="minimize-button"
+            class="window-button"
+            type="button"
+            aria-label="Minimize note"
+            title="Minimize"
+          >
+            −
+          </button>
+          <button
+            id="close-button"
+            class="window-button window-button--close"
+            type="button"
+            aria-label="Close note"
+            title="Close"
+          >
+            ×
+          </button>
+        </div>
+      </header>
+
+      <section class="note-editor" aria-label="Sticky note editor">
+        <label class="visually-hidden" for="note-title">Note title</label>
+        <input
+          id="note-title"
+          class="note-title-input"
+          type="text"
+          maxlength="160"
+          placeholder="Untitled note"
+          autocomplete="off"
+        />
+
+        <label class="visually-hidden" for="note-content">Note content</label>
+        <textarea
+          id="note-content"
+          class="note-content-input"
+          placeholder="Write a note..."
+          spellcheck="true"
+        ></textarea>
+      </section>
+
+      <footer class="note-footer">
+        <span id="save-status" class="save-status" role="status" aria-live="polite">Saved</span>
+        <span id="modified-time" class="modified-time"></span>
+      </footer>
+    </main>
+  </body>
+</html>

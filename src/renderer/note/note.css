@@ -52,6 +52,7 @@ textarea {
 
 .sticky-note.is-collapsed {
   grid-template-rows: 44px;
+  background: var(--note-header);
 }
 
 .sticky-note.is-collapsed .note-body {
@@ -60,31 +61,40 @@ textarea {
 
 .note-header {
   position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
   height: 44px;
   min-width: 0;
-  align-items: stretch;
   background: var(--note-header);
   -webkit-app-region: drag;
 }
 
 .note-name {
+  position: absolute;
+  top: 0;
+  left: 50%;
   display: flex;
-  min-width: 0;
+  width: max-content;
+  max-width: calc(100% - 176px);
+  height: 44px;
   align-items: center;
-  padding: 0 12px;
+  justify-content: center;
+  padding: 0 8px;
   overflow: hidden;
   color: var(--note-text);
   font-size: 13px;
   font-weight: 700;
+  text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
   pointer-events: none;
+  transform: translateX(-50%);
 }
 
 .window-controls {
+  position: absolute;
+  top: 0;
+  right: 0;
   display: flex;
+  height: 44px;
   align-items: stretch;
   -webkit-app-region: no-drag;
 }

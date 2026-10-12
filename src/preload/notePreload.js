@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld(
     saveCurrent: (payload) => ipcRenderer.invoke('note:save-current', payload),
     toggleCollapsed: () => ipcRenderer.invoke('note:toggle-collapsed'),
     moveBy: (deltaX, deltaY) => ipcRenderer.send('note:move-by', deltaX, deltaY),
+    resizeBy: (edge, deltaX, deltaY) =>
+      ipcRenderer.send('note:resize-by', edge, deltaX, deltaY),
     close: () => ipcRenderer.invoke('note:close')
   })
 );

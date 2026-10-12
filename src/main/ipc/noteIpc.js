@@ -49,7 +49,12 @@ function registerNoteIpc(noteStore, noteWindowManager) {
   });
 
   ipcMain.on(channels.NOTE_MOVE_BY, (event, deltaX, deltaY) => {
-    requireCurrentNoteId(event, noteWindowManager);
+    const noteId = noteWindowManager.getNoteIdForWebContents(event.sender.id);
+
+    if (!noteId) {
+      return;
+    }
+
     noteWindowManager.moveByForWebContents(event.sender.id, deltaX, deltaY);
   });
 

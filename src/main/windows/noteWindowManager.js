@@ -48,6 +48,7 @@ class NoteWindowManager {
       minHeight: MIN_HEIGHT,
       show: false,
       frame: false,
+      roundedCorners: false,
       resizable: true,
       maximizable: false,
       fullscreenable: false,
@@ -203,7 +204,7 @@ class NoteWindowManager {
       return { collapsed: false };
     }
 
-    this.expandedHeights.set(noteId, clamp(bounds.height, MIN_HEIGHT, MAX_HEIGHT, DEFAULT_HEIGHT));
+    this.expandedHeights.set(note.id, clamp(bounds.height, MIN_HEIGHT, MAX_HEIGHT, DEFAULT_HEIGHT));
     this.collapsedNotes.add(noteId);
     noteWindow.setMinimumSize(MIN_WIDTH, HEADER_HEIGHT);
     noteWindow.setBounds({

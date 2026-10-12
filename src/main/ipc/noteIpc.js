@@ -58,6 +58,21 @@ function registerNoteIpc(noteStore, noteWindowManager) {
     noteWindowManager.moveByForWebContents(event.sender.id, deltaX, deltaY);
   });
 
+  ipcMain.on(channels.NOTE_RESIZE_BY, (event, edge, deltaX, deltaY) => {
+    const noteId = noteWindowManager.getNoteIdForWebContents(event.sender.id);
+
+    if (!noteId) {
+      return;
+    }
+
+    noteWindowManager.resizeByForWebContents(
+      event.sender.id,
+      edge,
+      deltaX,
+      deltaY
+    );
+  });
+
   ipcMain.handle(channels.NOTE_CLOSE, (event) => {
     requireCurrentNoteId(event, noteWindowManager);
     const webContentsId = event.sender.id;
@@ -76,6 +91,7 @@ function disposeNoteIpc() {
   }
 
   ipcMain.removeAllListeners(channels.NOTE_MOVE_BY);
+  ipcMain.removeAllListeners(channels.NOTE_RESIZE_BY);
 }
 
 module.exports = { registerNoteIpc, disposeNoteIpc };

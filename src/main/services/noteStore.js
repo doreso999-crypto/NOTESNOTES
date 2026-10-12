@@ -15,12 +15,33 @@ function clone(value) {
   return structuredClone(value);
 }
 
-function createDefaultNote() {
+function getNextNewNoteTitle(notes) {
+  let highestNumber = 0;
+
+  for (const note of notes) {
+    const title = typeof note.title === 'string' ? note.title.trim() : '';
+
+    if (title === 'New Note') {
+      highestNumber = Math.max(highestNumber, 1);
+      continue;
+    }
+
+    const match = /^New Note (\d+)$/.exec(title);
+
+    if (match) {
+      highestNumber = Math.max(highestNumber, Number(match[1]));
+    }
+  }
+
+  return highestNumber === 0 ? 'New Note' : `New Note ${highestNumber + 1}`;
+}
+
+function createDefaultNote(title) {
   const now = new Date().toISOString();
 
   return {
     id: randomUUID(),
-    title: 'Untitled note',
+    title,
     content: '',
     createdAt: now,
     modifiedAt: now,
@@ -71,7 +92,7 @@ class NoteStore {
 
   async create() {
     return this.#mutate(() => {
-      const note = createDefaultNote();
+      const note = createDefaultNote(getNextNewNoteTitle(this.notes));
       this.notes.unshift(note);
       return note;
     });
@@ -84,7 +105,7 @@ class NoteStore {
       const duplicate = {
         ...clone(source),
         id: randomUUID(),
-        title: `Copy of ${source.title || 'Untitled note'}`,
+        title: `Copy of ${source.title || 'New Note'}`,
         createdAt: now,
         modifiedAt: now,
         archived: false,

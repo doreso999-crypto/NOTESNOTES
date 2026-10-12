@@ -7,36 +7,25 @@
       http-equiv="Content-Security-Policy"
       content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
     />
-    <title>StickyNotes Pro</title>
+    <title>New Note</title>
     <link rel="stylesheet" href="note.css" />
     <script src="note.js" defer></script>
   </head>
   <body>
-    <main class="sticky-note">
-      <header class="note-titlebar">
-        <div class="note-drag-region" aria-hidden="true">
-          <span class="note-handle">StickyNotes Pro</span>
-        </div>
+    <main class="sticky-note" id="sticky-note">
+      <header class="note-header" id="note-header">
+        <span class="note-name" id="note-name">New Note</span>
 
-        <div class="window-controls" aria-label="Window controls">
+        <div class="window-controls" aria-label="Note controls">
           <button
-            id="pin-button"
+            id="settings-button"
             class="window-button"
             type="button"
-            aria-label="Keep note on top"
-            aria-pressed="false"
-            title="Keep on top"
+            aria-label="Open note settings"
+            aria-expanded="false"
+            title="Settings"
           >
-            Pin
-          </button>
-          <button
-            id="minimize-button"
-            class="window-button"
-            type="button"
-            aria-label="Minimize note"
-            title="Minimize"
-          >
-            −
+            ⋯
           </button>
           <button
             id="close-button"
@@ -48,32 +37,31 @@
             ×
           </button>
         </div>
+
+        <section class="settings-menu" id="settings-menu" aria-label="Note settings" hidden>
+          <form id="rename-form" class="rename-form">
+            <label for="rename-input">Rename note</label>
+            <div class="rename-row">
+              <input
+                id="rename-input"
+                type="text"
+                maxlength="160"
+                autocomplete="off"
+              />
+              <button type="submit" class="rename-button">Save</button>
+            </div>
+          </form>
+        </section>
       </header>
 
-      <section class="note-editor" aria-label="Sticky note editor">
-        <label class="visually-hidden" for="note-title">Note title</label>
-        <input
-          id="note-title"
-          class="note-title-input"
-          type="text"
-          maxlength="160"
-          placeholder="Untitled note"
-          autocomplete="off"
-        />
-
-        <label class="visually-hidden" for="note-content">Note content</label>
+      <section class="note-body" aria-label="Note content">
         <textarea
           id="note-content"
-          class="note-content-input"
+          class="note-content"
           placeholder="Write a note..."
           spellcheck="true"
         ></textarea>
       </section>
-
-      <footer class="note-footer">
-        <span id="save-status" class="save-status" role="status" aria-live="polite">Saved</span>
-        <span id="modified-time" class="modified-time"></span>
-      </footer>
     </main>
   </body>
 </html>

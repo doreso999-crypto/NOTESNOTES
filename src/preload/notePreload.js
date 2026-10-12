@@ -7,8 +7,7 @@ contextBridge.exposeInMainWorld(
   Object.freeze({
     getCurrent: () => ipcRenderer.invoke('note:get-current'),
     saveCurrent: (payload) => ipcRenderer.invoke('note:save-current', payload),
-    setAlwaysOnTop: (enabled) => ipcRenderer.invoke('note:set-always-on-top', enabled),
-    minimize: () => ipcRenderer.invoke('note:minimize'),
+    toggleCollapsed: () => ipcRenderer.invoke('note:toggle-collapsed'),
     close: () => ipcRenderer.invoke('note:close')
   })
 );

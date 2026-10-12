@@ -29,7 +29,10 @@ function registerNoteIpc(noteStore, noteWindowManager) {
       throw new Error(`Unknown note: ${noteId}`);
     }
 
-    return note;
+    return {
+      ...note,
+      collapsed: noteWindowManager.isCollapsedForWebContents(event.sender.id)
+    };
   });
 
   ipcMain.handle(channels.NOTE_SAVE_CURRENT, (event, payload) => {

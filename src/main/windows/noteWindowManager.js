@@ -3,13 +3,15 @@
 const path = require('node:path');
 const { BrowserWindow } = require('electron');
 
-const HEADER_HEIGHT = 44;
+const HEADER_HEIGHT = 32;
+const RESIZE_STEP = 16;
 const MIN_WIDTH = 240;
-const MIN_HEIGHT = 180;
+const MIN_HEIGHT = 160;
 const DEFAULT_WIDTH = 320;
-const DEFAULT_HEIGHT = 360;
+const DEFAULT_HEIGHT = 352;
 const MAX_WIDTH = 1200;
-const MAX_HEIGHT = 1000;
+const MAX_HEIGHT = 1008;
+const VALID_RESIZE_EDGES = new Set(['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw']);
 
 function clamp(value, minimum, maximum, fallback) {
   if (!Number.isFinite(value)) {
@@ -17,6 +19,15 @@ function clamp(value, minimum, maximum, fallback) {
   }
 
   return Math.min(Math.max(Math.round(value), minimum), maximum);
+}
+
+function snapDimension(value, minimum, maximum, fallback) {
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+
+  const snapped = Math.round(value / RESIZE_STEP) * RESIZE_STEP;
+  return clamp(snapped, minimum, maximum, fallback);
 }
 
 class NoteWindowManager {
@@ -38,14 +49,26 @@ class NoteWindowManager {
     }
 
     const windowState = note.window ?? {};
-    const initialWidth = clamp(windowState.width, MIN_WIDTH, MAX_WIDTH, DEFAULT_WIDTH);
-    const expandedHeight = clamp(windowState.height, MIN_HEIGHT, MAX_HEIGHT, DEFAULT_HEIGHT);
+    const initialWidth = snapDimension(
+      windowState.width,
+      MIN_WIDTH,
+      MAX_WIDTH,
+      DEFAULT_WIDTH
+    );
+    const expandedHeight = snapDimension(
+      windowState.height,
+      MIN_HEIGHT,
+      MAX_HEIGHT,
+      DEFAULT_HEIGHT
+    );
 
     const options = {
       width: initialWidth,
       height: HEADER_HEIGHT,
       minWidth: MIN_WIDTH,
       minHeight: HEADER_HEIGHT,
+      maxWidth: MAX_WIDTH,
+      maxHeight: HEADER_HEIGHT,
       show: false,
       frame: false,
       roundedCorners: false,
@@ -108,7 +131,7 @@ class NoteWindowManager {
       const timer = setTimeout(() => {
         this.boundsTimers.delete(note.id);
         persistBounds();
-      }, 250);
+      }, 180);
 
       this.boundsTimers.set(note.id, timer);
     };
@@ -191,7 +214,7 @@ class NoteWindowManager {
     const bounds = noteWindow.getBounds();
 
     if (this.collapsedNotes.has(noteId)) {
-      const expandedHeight = clamp(
+      const expandedHeight = snapDimension(
         this.expandedHeights.get(noteId),
         MIN_HEIGHT,
         MAX_HEIGHT,
@@ -199,28 +222,31 @@ class NoteWindowManager {
       );
 
       this.collapsedNotes.delete(noteId);
-      noteWindow.setResizable(true);
       noteWindow.setMinimumSize(MIN_WIDTH, MIN_HEIGHT);
+      noteWindow.setMaximumSize(MAX_WIDTH, MAX_HEIGHT);
       noteWindow.setBounds({
         x: bounds.x,
         y: bounds.y,
-        width: bounds.width,
+        width: snapDimension(bounds.width, MIN_WIDTH, MAX_WIDTH, DEFAULT_WIDTH),
         height: expandedHeight
       });
 
       return { collapsed: false };
     }
 
-    this.expandedHeights.set(noteId, clamp(bounds.height, MIN_HEIGHT, MAX_HEIGHT, DEFAULT_HEIGHT));
+    this.expandedHeights.set(
+      noteId,
+      snapDimension(bounds.height, MIN_HEIGHT, MAX_HEIGHT, DEFAULT_HEIGHT)
+    );
     this.collapsedNotes.add(noteId);
     noteWindow.setMinimumSize(MIN_WIDTH, HEADER_HEIGHT);
+    noteWindow.setMaximumSize(MAX_WIDTH, HEADER_HEIGHT);
     noteWindow.setBounds({
       x: bounds.x,
       y: bounds.y,
-      width: bounds.width,
+      width: snapDimension(bounds.width, MIN_WIDTH, MAX_WIDTH, DEFAULT_WIDTH),
       height: HEADER_HEIGHT
     });
-    noteWindow.setResizable(false);
 
     return { collapsed: true };
   }
@@ -241,6 +267,82 @@ class NoteWindowManager {
 
     const [x, y] = noteWindow.getPosition();
     noteWindow.setPosition(x + xDelta, y + yDelta, false);
+  }
+
+  resizeByForWebContents(webContentsId, edge, deltaX, deltaY) {
+    const noteId = this.getNoteIdForWebContents(webContentsId);
+    const noteWindow = this.getWindowForWebContents(webContentsId);
+
+    if (!noteId || !noteWindow || !VALID_RESIZE_EDGES.has(edge)) {
+      return;
+    }
+
+    const bounds = noteWindow.getBounds();
+    const xDelta = Number.isFinite(deltaX) ? Math.round(deltaX) : 0;
+    const yDelta = Number.isFinite(deltaY) ? Math.round(deltaY) : 0;
+    const collapsed = this.collapsedNotes.has(noteId);
+
+    let x = bounds.x;
+    let y = bounds.y;
+    let width = bounds.width;
+    let height = bounds.height;
+
+    if (edge.includes('e') && xDelta !== 0) {
+      width = snapDimension(
+        bounds.width + xDelta,
+        MIN_WIDTH,
+        MAX_WIDTH,
+        bounds.width
+      );
+    }
+
+    if (edge.includes('w') && xDelta !== 0) {
+      const nextWidth = snapDimension(
+        bounds.width - xDelta,
+        MIN_WIDTH,
+        MAX_WIDTH,
+        bounds.width
+      );
+      x += bounds.width - nextWidth;
+      width = nextWidth;
+    }
+
+    if (!collapsed && edge.includes('s') && yDelta !== 0) {
+      height = snapDimension(
+        bounds.height + yDelta,
+        MIN_HEIGHT,
+        MAX_HEIGHT,
+        bounds.height
+      );
+    }
+
+    if (!collapsed && edge.includes('n') && yDelta !== 0) {
+      const nextHeight = snapDimension(
+        bounds.height - yDelta,
+        MIN_HEIGHT,
+        MAX_HEIGHT,
+        bounds.height
+      );
+      y += bounds.height - nextHeight;
+      height = nextHeight;
+    }
+
+    if (collapsed) {
+      height = HEADER_HEIGHT;
+    } else {
+      this.expandedHeights.set(noteId, height);
+    }
+
+    if (
+      x === bounds.x &&
+      y === bounds.y &&
+      width === bounds.width &&
+      height === bounds.height
+    ) {
+      return;
+    }
+
+    noteWindow.setBounds({ x, y, width, height }, false);
   }
 
   closeForWebContents(webContentsId) {
